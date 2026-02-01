@@ -1732,21 +1732,75 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         return enabled
 
     def _getDefaultHomeHubs(self, native_hubs):
-        """Get default hubs for Home section with hidden-by-default filtering.
+        """Get default hubs for Home section - per-library Recently Added instead of merged.
 
-        Returns native Home hubs minus hidden-by-default ones.
+        Returns native Home hubs (minus hidden-by-default merged ones) plus
+        per-library Recently Added hubs from each library section.
         """
-        filtered = []
+        combined = []
 
         # Add native Home hubs except hidden-by-default ones
         for hub in native_hubs:
             identifier = hub.getCleanHubIdentifier(is_home=True)
-            if identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT:
-                filtered.append(hub)
+            is_hidden = identifier in self.HOME_HUBS_HIDDEN_BY_DEFAULT
+            if not is_hidden:
+                combined.append(hub)
 
-        result = HubsList(filtered)
+        # Get all library sections that need to be fetched
+        try:
+            all_sections = plexapp.SERVERMANAGER.selectedServer.library.sections()
+        except Exception as e:
+            all_sections = []
+
+        # Helper to check if section is cached (handles int/string key mismatch)
+        def is_section_cached(key):
+            if key in self.sectionHubs:
+                return True
+            str_key = str(key) if key is not None else None
+            for cached_key in self.sectionHubs:
+                if str(cached_key) if cached_key is not None else None == str_key:
+                    return True
+            return False
+
+        # Log current cache state
+
+        missing_sections = []
+        cached_sections = []
+        for section in all_sections:
+            if is_section_cached(section.key):
+                cached_sections.append(section.key)
+            else:
+                missing_sections.append(section.key)
+
+
+        # Trigger fetch for missing library sections
+        if missing_sections:
+            self.fetchMissingSections(missing_sections)
+
+        # Find library sections that have Recently Added hubs cached
+        for section_key, section_hubs in self.sectionHubs.items():
+            if section_key is None or not section_hubs:
+                continue  # Skip Home section
+
+            hub_identifiers = [h.getCleanHubIdentifier(is_home=False) for h in section_hubs]
+
+            for hub in section_hubs:
+                identifier = hub.getCleanHubIdentifier(is_home=False)
+                matches_pattern = self.isLibraryHubForHomeDefault(identifier)
+                # Include per-library Recently Added hubs
+                if matches_pattern:
+                    hub._crossSectionSource = section_key
+                    hub._catalogId = '{}:{}'.format(section_key, identifier)
+                    combined.append(hub)
+
+        result = HubsList(combined)
         result.lastUpdated = native_hubs.lastUpdated
         result.invalid = native_hubs.invalid
+
+        native_count = len([h for h in combined if h.__dict__.get('_crossSectionSource') is None])
+        per_lib_count = len([h for h in combined if h.__dict__.get('_crossSectionSource') is not None])
+        for h in combined:
+            src = h.__dict__.get('_crossSectionSource', 'native')
 
         return result
 
@@ -1907,12 +1961,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def fetchMissingSections(self, section_keys):
         """Trigger background fetch for missing section hubs."""
-        # Use sections from sectionList to avoid extra network call
-        sections_by_key = {}
-        if hasattr(self, 'sectionList') and self.sectionList:
-            for mli in self.sectionList:
-                if mli.dataSource:
-                    sections_by_key[str(mli.dataSource.key)] = mli.dataSource
+        try:
+            all_sections = plexapp.SERVERMANAGER.selectedServer.library.sections()
+        except:
+            all_sections = []
+
+        sections_by_key = {str(s.key): s for s in all_sections}
         sections_by_key[None] = home_section
 
         for section_key in section_keys:
