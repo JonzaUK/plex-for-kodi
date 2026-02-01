@@ -1134,6 +1134,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                         # On Deck comes right after Continue Watching
                         user_order['home.ondeck'] = cw_order + 0.5
 
+        # Pre-compute hub index lookup for O(1) access instead of O(n) per hub
+        hubs_list = list(hubs)
+        hub_index = {id(hub): idx for idx, hub in enumerate(hubs_list)}
+
         def get_order(hub):
             identifier = hub.getCleanHubIdentifier(is_home=is_home)
 
@@ -1147,13 +1151,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if catalog_id in user_order:
                 return (0, user_order[catalog_id])  # User-ordered hubs first
 
-            # Fall back to server order (use index in original list)
-            try:
-                return (1, list(hubs).index(hub))
-            except (ValueError, TypeError):
-                return (1, 999)
+            # Fall back to server order (use pre-computed index)
+            return (1, hub_index.get(id(hub), 999))
 
-        return sorted(hubs, key=get_order)
+        return sorted(hubs_list, key=get_order)
 
     def showHubSettingsDialog(self, section):
         """Show dialog to manage hubs for the given section."""
@@ -1735,60 +1736,26 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         """Get default hubs for Home section - per-library Recently Added instead of merged.
 
         Returns native Home hubs (minus hidden-by-default merged ones) plus
-        per-library Recently Added hubs from each library section.
+        per-library Recently Added hubs from each library section that are already cached.
         """
         combined = []
 
         # Add native Home hubs except hidden-by-default ones
         for hub in native_hubs:
             identifier = hub.getCleanHubIdentifier(is_home=True)
-            is_hidden = identifier in self.HOME_HUBS_HIDDEN_BY_DEFAULT
-            if not is_hidden:
+            if identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT:
                 combined.append(hub)
 
-        # Get all library sections that need to be fetched
-        try:
-            all_sections = plexapp.SERVERMANAGER.selectedServer.library.sections()
-        except Exception as e:
-            all_sections = []
-
-        # Helper to check if section is cached (handles int/string key mismatch)
-        def is_section_cached(key):
-            if key in self.sectionHubs:
-                return True
-            str_key = str(key) if key is not None else None
-            for cached_key in self.sectionHubs:
-                if str(cached_key) if cached_key is not None else None == str_key:
-                    return True
-            return False
-
-        # Log current cache state
-
-        missing_sections = []
-        cached_sections = []
-        for section in all_sections:
-            if is_section_cached(section.key):
-                cached_sections.append(section.key)
-            else:
-                missing_sections.append(section.key)
-
-
-        # Trigger fetch for missing library sections
-        if missing_sections:
-            self.fetchMissingSections(missing_sections)
-
-        # Find library sections that have Recently Added hubs cached
+        # Add per-library Recently Added hubs from already-cached library sections
+        # (No need to call library.sections() - we use whatever is already in sectionHubs.
+        #  Missing sections will be added when their background fetch completes and Home refreshes.)
         for section_key, section_hubs in self.sectionHubs.items():
             if section_key is None or not section_hubs:
                 continue  # Skip Home section
 
-            hub_identifiers = [h.getCleanHubIdentifier(is_home=False) for h in section_hubs]
-
             for hub in section_hubs:
                 identifier = hub.getCleanHubIdentifier(is_home=False)
-                matches_pattern = self.isLibraryHubForHomeDefault(identifier)
-                # Include per-library Recently Added hubs
-                if matches_pattern:
+                if self.isLibraryHubForHomeDefault(identifier):
                     hub._crossSectionSource = section_key
                     hub._catalogId = '{}:{}'.format(section_key, identifier)
                     combined.append(hub)
@@ -1796,11 +1763,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         result = HubsList(combined)
         result.lastUpdated = native_hubs.lastUpdated
         result.invalid = native_hubs.invalid
-
-        native_count = len([h for h in combined if h.__dict__.get('_crossSectionSource') is None])
-        per_lib_count = len([h for h in combined if h.__dict__.get('_crossSectionSource') is not None])
-        for h in combined:
-            src = h.__dict__.get('_crossSectionSource', 'native')
 
         return result
 
@@ -1961,13 +1923,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def fetchMissingSections(self, section_keys):
         """Trigger background fetch for missing section hubs."""
-        try:
-            all_sections = plexapp.SERVERMANAGER.selectedServer.library.sections()
-        except:
-            all_sections = []
-
-        sections_by_key = {str(s.key): s for s in all_sections}
-        sections_by_key[None] = home_section
+        # Use sections from sectionList to avoid expensive network call
+        sections_by_key = {None: home_section}
+        if hasattr(self, 'sectionList') and self.sectionList:
+            for mli in self.sectionList:
+                if mli.dataSource and hasattr(mli.dataSource, 'key'):
+                    sections_by_key[str(mli.dataSource.key)] = mli.dataSource
 
         for section_key in section_keys:
             section_obj = sections_by_key.get(str(section_key) if section_key else None)
