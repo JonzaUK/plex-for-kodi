@@ -1253,24 +1253,40 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                         options.append(make_option(cat_id, hub_info, True, position=idx + 1))
                         enabled_hubs_shown.add(cat_id)
         else:
-            # No custom config - show enabled hubs in default order (alphabetically by title within source groups)
-            enabled_list = []
-            for catalog_id, (is_enabled, hub_info) in hub_states.items():
-                if is_enabled:
-                    enabled_list.append((catalog_id, hub_info))
+            # No custom config - show enabled hubs in ACTUAL SCREEN ORDER from sectionHubs
+            # This ensures the dialog matches what the user sees on screen
+            ordered_catalog_ids = []
 
-            # Sort enabled hubs by source section, then by title
-            def enabled_sort_key(x):
-                cat_id, info = x
-                source = info.get('source_section_title', 'Unknown')
-                title = info.get('title', '')
-                if source == section_title:
-                    return (0, title)
-                if source == 'Home':
-                    return (1, title)
-                return (2, source, title)
+            # Get hubs in screen order from sectionHubs
+            cached_hubs = self.sectionHubs.get(section_key, [])
+            is_home = section_key is None
 
-            for idx, (catalog_id, hub_info) in enumerate(sorted(enabled_list, key=enabled_sort_key)):
+            for hub in cached_hubs:
+                identifier = hub.getCleanHubIdentifier(is_home=is_home)
+                if is_home:
+                    catalog_id = identifier
+                else:
+                    catalog_id = '{}:{}'.format(section_key, identifier)
+                if catalog_id in hub_states:
+                    is_enabled, hub_info = hub_states[catalog_id]
+                    if is_enabled:
+                        ordered_catalog_ids.append((catalog_id, hub_info))
+
+            # For Home, also add per-library Recently Added hubs in their cached order
+            if is_home:
+                for lib_section_key, lib_hubs in self.sectionHubs.items():
+                    if lib_section_key is None or not lib_hubs:
+                        continue
+                    for hub in lib_hubs:
+                        identifier = hub.getCleanHubIdentifier(is_home=False)
+                        if self.isLibraryHubForHomeDefault(identifier):
+                            catalog_id = '{}:{}'.format(lib_section_key, identifier)
+                            if catalog_id in hub_states and catalog_id not in [x[0] for x in ordered_catalog_ids]:
+                                is_enabled, hub_info = hub_states[catalog_id]
+                                if is_enabled:
+                                    ordered_catalog_ids.append((catalog_id, hub_info))
+
+            for idx, (catalog_id, hub_info) in enumerate(ordered_catalog_ids):
                 options.append(make_option(catalog_id, hub_info, True, position=idx + 1))
                 enabled_hubs_shown.add(catalog_id)
 
@@ -1392,43 +1408,51 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_config = self.hubSettings[config_key]
 
         if need_init:
-            # First customization - initialize with default enabled hubs
+            # First customization - initialize with default enabled hubs IN SCREEN ORDER
+            # Use sectionHubs (actual display order) instead of availableHubs (discovery order)
             section_config['custom'] = True
             section_config['hubs'] = []
+            is_home = section_key is None
 
-            if section_key is None:
-                # Home section: use smart defaults
-                # - Native Home hubs EXCEPT hidden-by-default merged ones
-                # - Per-library Recently Added hubs
-                for cat_id, hub_info in self.availableHubs.items():
-                    hub_source_key = hub_info.get('source_section_key')
-                    hub_identifier = hub_info.get('identifier', '')
+            # Get hubs from sectionHubs in their actual display order
+            cached_hubs = self.sectionHubs.get(section_key, [])
 
-                    should_enable = False
-                    if hub_source_key is None:
-                        # Native Home hub - enable unless hidden by default
-                        should_enable = hub_identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT
-                    else:
-                        # Cross-section hub - enable if it's a Recently Added hub
-                        should_enable = self.isLibraryHubForHomeDefault(hub_identifier)
+            for hub in cached_hubs:
+                hub_identifier = hub.getCleanHubIdentifier(is_home=is_home)
+                if is_home:
+                    cat_id = hub_identifier
+                else:
+                    cat_id = '{}:{}'.format(section_key, hub_identifier)
 
-                    if should_enable:
-                        section_config['hubs'].append({
-                            'catalog_id': cat_id,
-                            'identifier': hub_identifier,
-                            'order': len(section_config['hubs'])
-                        })
-            else:
-                # Library section: enable all native hubs
-                for cat_id, hub_info in self.availableHubs.items():
-                    hub_source_key = hub_info.get('source_section_key')
-                    # Compare as strings to handle int/string mismatch
-                    if str(hub_source_key) == str(section_key) if hub_source_key is not None else False:
-                        section_config['hubs'].append({
-                            'catalog_id': cat_id,
-                            'identifier': hub_info.get('identifier', cat_id),
-                            'order': len(section_config['hubs'])
-                        })
+                # Check if this hub should be enabled by default
+                should_enable = True
+                if is_home:
+                    should_enable = hub_identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT
+
+                if should_enable and cat_id in self.availableHubs:
+                    section_config['hubs'].append({
+                        'catalog_id': cat_id,
+                        'identifier': hub_identifier,
+                        'order': len(section_config['hubs'])
+                    })
+
+            # For Home, also add per-library Recently Added hubs in their cached order
+            if is_home:
+                for lib_section_key, lib_hubs in self.sectionHubs.items():
+                    if lib_section_key is None or not lib_hubs:
+                        continue
+                    for hub in lib_hubs:
+                        hub_identifier = hub.getCleanHubIdentifier(is_home=False)
+                        if self.isLibraryHubForHomeDefault(hub_identifier):
+                            cat_id = '{}:{}'.format(lib_section_key, hub_identifier)
+                            # Avoid duplicates
+                            existing_ids = {h.get('catalog_id') for h in section_config['hubs']}
+                            if cat_id not in existing_ids and cat_id in self.availableHubs:
+                                section_config['hubs'].append({
+                                    'catalog_id': cat_id,
+                                    'identifier': hub_identifier,
+                                    'order': len(section_config['hubs'])
+                                })
 
         # Find and update the hub in the config
         hub_found = False
