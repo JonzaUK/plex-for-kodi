@@ -53,6 +53,7 @@ class DropdownDialog(kodigui.BaseDialog):
         self.initialMovingPos = None  # Original position for cancel/restore
         self.moveModeCallback = kwargs.get('move_mode_callback')  # Callback for move operations
         self.moveUpperBound = None  # First position that can't be moved to (separator boundary)
+        self._justEnteredMoveMode = False  # Flag to skip the SELECT that entered move mode
 
     @property
     def x(self):
@@ -121,6 +122,10 @@ class DropdownDialog(kodigui.BaseDialog):
                 self._handleMoveAction(action)
                 return
             elif action == xbmcgui.ACTION_SELECT_ITEM:
+                # Skip the SELECT that triggered entering move mode (onClick and onAction both fire)
+                if self._justEnteredMoveMode:
+                    self._justEnteredMoveMode = False
+                    return
                 self._confirmMove()
                 return
             elif action in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
@@ -178,6 +183,7 @@ class DropdownDialog(kodigui.BaseDialog):
 
         self.movingItem = mli
         self.initialMovingPos = pos
+        self._justEnteredMoveMode = True  # Skip the next SELECT action (same click triggers both onClick and onAction)
         mli.setProperty('moving', '1')
         self.setProperty('moving', '1')
         return True
