@@ -564,18 +564,17 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         'season': 'poster',
     }
 
-    # Home hub identifiers that should be HIDDEN by default (merged recently added views)
-    # Users can enable these via Manage Hubs if they prefer the merged view
-    # Also includes playlists which can cause scrolling issues when empty
-    HOME_HUBS_HIDDEN_BY_DEFAULT = {
-        'home.movies.recent',
-        'home.television.recent',
-        'home.music.recent',
-        'home.videos.recent',
-        'home.photos.recent',
-        'playlists.audio',
-        'playlists.video',
+    # Native Home hub identifiers that SHOULD be shown by default (whitelist approach)
+    # Any native Home hub NOT in this list is hidden by default
+    # Users can enable/disable any hub via Manage Hubs after first launch
+    HOME_HUBS_SHOWN_BY_DEFAULT = {
+        'continueWatching',  # New combined Continue Watching mode
+        'home.continue',     # Old split mode - episodes
+        'home.ondeck',       # Old split mode - movies/shows
     }
+
+    # Settings version for migration - increment when defaults change
+    HUB_SETTINGS_VERSION = 1
 
     # Per-library hub identifier patterns that should be shown on Home by default
     # These replace the merged "Recently Added" hubs
@@ -584,6 +583,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         '.recentlyadded',  # Matches movie.recentlyadded, show.recentlyadded, etc.
         '.recent.added',   # Matches music.recent.added (music libraries use different format)
     )
+
+    @classmethod
+    def isHomeHubShownByDefault(cls, identifier):
+        """Check if a native Home hub should be shown by default."""
+        return identifier in cls.HOME_HUBS_SHOWN_BY_DEFAULT
 
     @classmethod
     def isLibraryHubForHomeDefault(cls, identifier):
@@ -872,10 +876,24 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         setting_key = 'hub.settings.{}.{}'.format(plexapp.SERVERMANAGER.selectedServer.uuid[-8:], plexapp.ACCOUNT.ID)
         data = util.getSetting(setting_key, '')
         self.hubSettings = {}
+        needs_save = False
         try:
             loaded = json.loads(data)
+
+            # Check for migration - if version is missing or old, reset Home section
+            # This ensures users upgrading get the new default hub settings
+            stored_version = loaded.get('_version', 0)
+            if stored_version < self.HUB_SETTINGS_VERSION:
+                # Reset Home section config so new defaults apply
+                if '__home__' in loaded:
+                    del loaded['__home__']
+                loaded['_version'] = self.HUB_SETTINGS_VERSION
+                needs_save = True
+
             # Convert "__home__" key back to None (JSON doesn't support None keys)
             for key, value in loaded.items():
+                if key == '_version':
+                    continue  # Skip version key, not a section config
                 if key == '__home__':
                     self.hubSettings[None] = value
                 else:
@@ -885,19 +903,22 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         except:
             util.ERROR()
 
+        # Save migrated settings if needed (deferred to avoid issues during init)
+        if needs_save:
+            self._hubSettingsNeedsMigrationSave = True
+
     def saveHubSettings(self):
-        if self.hubSettings:
-            setting_key = 'hub.settings.{}.{}'.format(plexapp.SERVERMANAGER.selectedServer.uuid[-8:],
-                                                      plexapp.ACCOUNT.ID)
-            # Convert None key to "__home__" for JSON storage
-            to_save = {}
-            for key, value in self.hubSettings.items():
-                if key is None:
-                    to_save['__home__'] = value
-                else:
-                    to_save[key] = value
-            json_str = json.dumps(to_save)
-            util.setSetting(setting_key, json_str)
+        setting_key = 'hub.settings.{}.{}'.format(plexapp.SERVERMANAGER.selectedServer.uuid[-8:],
+                                                  plexapp.ACCOUNT.ID)
+        # Convert None key to "__home__" for JSON storage and include version
+        to_save = {'_version': self.HUB_SETTINGS_VERSION}
+        for key, value in self.hubSettings.items():
+            if key is None:
+                to_save['__home__'] = value
+            else:
+                to_save[key] = value
+        json_str = json.dumps(to_save)
+        util.setSetting(setting_key, json_str)
 
     @staticmethod
     def inferDisplayType(hub):
@@ -1075,9 +1096,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if not section_config or not section_config.get('custom'):
             # No custom config - use smart defaults for Home section
             if section_key is None:
-                # Hide merged "Recently Added" hubs by default on Home
-                # Users see per-library hubs instead
-                if identifier in self.HOME_HUBS_HIDDEN_BY_DEFAULT:
+                # Only show whitelisted native Home hubs by default
+                # Users see per-library Recently Added hubs instead of merged ones
+                if not self.isHomeHubShownByDefault(identifier):
                     return True
             return False
 
@@ -1204,12 +1225,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
                 if section_key is None:
                     # Home section defaults:
-                    # - Hide merged Recently Added hubs
+                    # - Show only whitelisted native Home hubs (Continue Watching, On Deck)
                     # - Show per-library Recently Added hubs
-                    # - Show other native Home hubs
                     if hub_source_key is None:
-                        # Native Home hub - check if it's hidden by default
-                        is_enabled = hub_identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT
+                        # Native Home hub - check if it's in the whitelist
+                        is_enabled = self.isHomeHubShownByDefault(hub_identifier)
                     else:
                         # Cross-section hub - enable if it's a Recently Added hub
                         is_enabled = self.isLibraryHubForHomeDefault(hub_identifier)
@@ -1427,7 +1447,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 # Check if this hub should be enabled by default
                 should_enable = True
                 if is_home:
-                    should_enable = hub_identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT
+                    should_enable = self.isHomeHubShownByDefault(hub_identifier)
 
                 if should_enable and cat_id in self.availableHubs:
                     section_config['hubs'].append({
@@ -1552,14 +1572,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_config['hubs'] = []
 
         if config_key is None:
-            # Home section: use smart defaults
+            # Home section: use smart defaults (whitelist for native hubs)
             for cat_id, hub_info in self.availableHubs.items():
                 hub_source_key = hub_info.get('source_section_key')
                 hub_identifier = hub_info.get('identifier', '')
 
                 should_enable = False
                 if hub_source_key is None:
-                    should_enable = hub_identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT
+                    should_enable = self.isHomeHubShownByDefault(hub_identifier)
                 else:
                     should_enable = self.isLibraryHubForHomeDefault(hub_identifier)
 
@@ -1764,10 +1784,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         """
         combined = []
 
-        # Add native Home hubs except hidden-by-default ones
+        # Add only whitelisted native Home hubs (Continue Watching, On Deck)
         for hub in native_hubs:
             identifier = hub.getCleanHubIdentifier(is_home=True)
-            if identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT:
+            if self.isHomeHubShownByDefault(identifier):
                 combined.append(hub)
 
         # Add per-library Recently Added hubs from already-cached library sections
@@ -1802,12 +1822,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         # Check if we have custom config with cross-section hubs
         if not include_cross_section:
-            # For Home with no custom config, still filter out hidden-by-default hubs
+            # For Home with no custom config, only show whitelisted hubs
             if section_key is None:
                 filtered = []
                 for hub in native_hubs:
                     identifier = hub.getCleanHubIdentifier(is_home=True)
-                    if identifier not in self.HOME_HUBS_HIDDEN_BY_DEFAULT:
+                    if self.isHomeHubShownByDefault(identifier):
                         filtered.append(hub)
                 if len(filtered) != len(native_hubs):
                     result = HubsList(filtered)
@@ -2744,6 +2764,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if plexapp.SERVERMANAGER.selectedServer:
                 self.loadLibrarySettings()
                 self.loadHubSettings()
+                # Save migrated settings if needed (deferred from loadHubSettings)
+                if getattr(self, '_hubSettingsNeedsMigrationSave', False):
+                    self.saveHubSettings()
+                    self._hubSettingsNeedsMigrationSave = False
                 # Clear hub catalog on server change - will be discovered lazily when needed
                 self.availableHubs = {}
             if not plexapp.SERVERMANAGER.selectedServer:
