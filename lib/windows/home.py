@@ -1359,7 +1359,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 align_items="left",
                 close_only_with_back=True,
                 options_callback=self.onHubSettingToggle,
-                dialog_props=self.carriedProps
+                dialog_props=self.carriedProps,
+                move_mode_callback=self._onHubMoveCallback
             )
         except Exception as e:
             util.ERROR('Hub Settings: Error showing dropdown: {}'.format(e))
@@ -1393,21 +1394,21 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_key = getattr(self, '_managingHubsForSection', self.lastSection.key)
         is_currently_enabled = choice.get('enabled', False)
 
-        # If hub is currently enabled, show options menu (Move Up, Move Down, Disable)
+        # If hub is currently enabled, enter move mode for pick-and-place reordering
         if is_currently_enabled:
-            action = self._showHubActionMenu(choice, section_key, optionsList)
-            if action == 'move_up':
-                self._moveHubInOrder(catalog_id, section_key, direction=-1)
+            # Ensure custom config exists before entering move mode
+            config_created = self._ensureCustomConfigExists(section_key)
+            if config_created:
+                # Refresh dialog to show position numbers now that config exists
                 self._refreshHubSettingsDialog(optionsList, section_key)
-                return
-            elif action == 'move_down':
-                self._moveHubInOrder(catalog_id, section_key, direction=1)
-                self._refreshHubSettingsDialog(optionsList, section_key)
-                return
-            elif action == 'disable':
-                new_enabled = False
-            else:
-                return  # Cancelled
+
+            # Store references for move mode
+            self._movingHubCatalogId = catalog_id
+            self._movingHubSectionKey = section_key
+            self._movingHubOptionsList = optionsList
+
+            # Signal dropdown to enter move mode
+            return 'enter_move_mode'
         else:
             new_enabled = True
 
@@ -1504,8 +1505,131 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         # Mark that settings changed - refresh will happen after dialog closes
         self._hubsSettingsChanged = True
 
+    def _onHubMoveCallback(self, action, mli, old_pos, new_pos):
+        """Handle move mode callbacks from the dropdown dialog.
+
+        Args:
+            action: 'move', 'confirm', or 'cancel'
+            mli: The ManagedListItem being moved
+            old_pos: Original position (or position before this move)
+            new_pos: New position (or target position)
+        """
+        section_key = getattr(self, '_movingHubSectionKey', None)
+        catalog_id = getattr(self, '_movingHubCatalogId', None)
+        optionsList = getattr(self, '_movingHubOptionsList', None)
+
+        if action == 'move':
+            # Update the underlying data order to match the visual order
+            if catalog_id:
+                self._moveHubToPosition(catalog_id, section_key, old_pos, new_pos, optionsList)
+        elif action == 'confirm':
+            # Finalize the move - save settings and refresh display
+            if optionsList:
+                self._refreshHubSettingsDialog(optionsList, section_key)
+            self.saveHubSettings()
+            self._hubsSettingsChanged = True
+
+            # Show disable option if user confirmed without moving (second click pattern)
+            if old_pos == new_pos and mli:
+                choice = mli.dataSource
+                if choice and choice.get('enabled'):
+                    self._showDisableConfirmation(choice, section_key, optionsList)
+        elif action == 'cancel':
+            # Restore original position - the dropdown already moved the item back visually
+            # We need to restore the data order as well
+            if catalog_id and optionsList:
+                self._restoreHubOrder(section_key, optionsList)
+
+        # Clear move mode references
+        self._movingHubCatalogId = None
+        self._movingHubSectionKey = None
+        self._movingHubOptionsList = None
+
+    def _moveHubToPosition(self, catalog_id, section_key, from_visual_pos, to_visual_pos, optionsList):
+        """Move a hub from one visual position to another in the settings.
+
+        The visual position directly maps to the config index for enabled hubs since
+        both lists have enabled hubs in order starting from position 0.
+        """
+        if not self.hubSettings or from_visual_pos == to_visual_pos:
+            return
+
+        config_key = str(section_key) if section_key is not None else None
+        section_config = self.hubSettings.get(config_key)
+        if not section_config or not section_config.get('custom'):
+            return
+
+        hubs = section_config.get('hubs', [])
+
+        # Visual position maps directly to config index for enabled hubs
+        from_idx = from_visual_pos
+        to_idx = to_visual_pos
+
+        # Clamp to valid range
+        if from_idx < 0 or from_idx >= len(hubs):
+            return
+        if to_idx < 0 or to_idx >= len(hubs):
+            return
+
+        # Remove the hub from its current position and insert at new position
+        hub = hubs.pop(from_idx)
+        hubs.insert(to_idx, hub)
+
+        # Update order values
+        for idx, hub_config in enumerate(hubs):
+            hub_config['order'] = idx
+
+    def _restoreHubOrder(self, section_key, optionsList):
+        """Restore hub order from saved settings after a cancelled move."""
+        # Reload settings and refresh the display
+        self.loadHubSettings()
+        if optionsList:
+            self._refreshHubSettingsDialog(optionsList, section_key)
+
+    def _showDisableConfirmation(self, choice, section_key, optionsList):
+        """Show disable confirmation when user clicks on a hub without moving it."""
+        hub_title = choice.get('hub_info', {}).get('title', choice.get('identifier', 'Hub'))
+        catalog_id = choice.get('catalog_id', choice.get('identifier'))
+
+        # Show simple disable confirmation
+        result = optionsdialog.show(
+            header=hub_title,
+            info=T(34086, 'Choose action'),
+            button0=T(34085, 'Disable'),
+        )
+
+        if result == 0:
+            # Disable the hub
+            self._disableHub(catalog_id, section_key)
+            if optionsList:
+                self._refreshHubSettingsDialog(optionsList, section_key)
+            self._hubsSettingsChanged = True
+
+    def _disableHub(self, catalog_id, section_key):
+        """Disable a hub by removing it from the enabled list."""
+        if not self.hubSettings:
+            return
+
+        config_key = str(section_key) if section_key is not None else None
+        section_config = self.hubSettings.get(config_key)
+        if not section_config or not section_config.get('custom'):
+            return
+
+        hubs = section_config.get('hubs', [])
+        for hub_config in hubs[:]:  # Iterate over a copy
+            if hub_config.get('catalog_id') == catalog_id:
+                hubs.remove(hub_config)
+                break
+
+        # Update order values
+        for idx, hub_config in enumerate(hubs):
+            hub_config['order'] = idx
+
+        self.saveHubSettings()
+
     def _showHubActionMenu(self, choice, section_key, optionsList):
-        """Show action menu for an enabled hub: Move Up, Move Down, Disable."""
+        """Show action menu for an enabled hub: Move Up, Move Down, Disable.
+        NOTE: This is now only used as fallback - pick-and-place is the primary UX."""
         hub_title = choice.get('hub_info', {}).get('title', choice.get('identifier', 'Hub'))
 
         # Ensure custom config exists before checking move capabilities
