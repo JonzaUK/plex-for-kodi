@@ -1522,6 +1522,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             # Update the underlying data order to match the visual order
             if catalog_id:
                 self._moveHubToPosition(catalog_id, section_key, old_pos, new_pos, optionsList)
+            # Don't clear references - more moves may follow
+            return
         elif action == 'confirm':
             # Finalize the move - save settings and refresh display
             if optionsList:
@@ -1540,7 +1542,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if catalog_id and optionsList:
                 self._restoreHubOrder(section_key, optionsList)
 
-        # Clear move mode references
+        # Clear move mode references only on confirm/cancel, not on move
         self._movingHubCatalogId = None
         self._movingHubSectionKey = None
         self._movingHubOptionsList = None
