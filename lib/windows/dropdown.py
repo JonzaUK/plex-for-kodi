@@ -279,6 +279,9 @@ class DropdownDialog(kodigui.BaseDialog):
         return self.movingItem is not None
 
     def onClick(self, controlID):
+        # If in move mode, let onAction handle it (onClick and onAction both fire for Enter)
+        if self.movingItem is not None:
+            return
         if controlID == self.OPTIONS_LIST_ID:
             self.setChoice()
         else:
