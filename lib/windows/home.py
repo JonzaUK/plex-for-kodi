@@ -3970,6 +3970,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                     hidden_count += 1
                     continue
 
+            # Skip hubs with no content - they don't take a slot, but will appear
+            # automatically when they have content on the next refresh.
+            # This prevents empty hubs from breaking the scroll animation chain.
+            if not hub.items:
+                continue
+
             # Determine display type for this hub and set as window property for skin
             display_type = self.getHubDisplayType(hub, identifier)
             self.setProperty('hub.display.4{0:02d}'.format(hub_index), display_type)
