@@ -188,15 +188,23 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
         # For Home section, optionally use the combined continueWatching hub (like modern Plex clients)
         # This replaces the old separate home.continue and home.ondeck hubs
         if use_new_cw and not search_query and not section:
-            cq = '/hubs/continueWatching'
-            if section_ids:
-                cq += util.joinArgs(params)
+            # Check if continueWatching hub is in the ignore list to avoid unnecessary HTTP request
+            # The ignore_hubs format uses "None:hubIdentifier" for Home section hubs
+            skip_continue_watching = ignore_hubs and (
+                "None:continueWatching" in ignore_hubs or
+                "continueWatching" in ignore_hubs
+            )
 
-            cdata = self.query(cq, params=params)
-            if cdata and len(cdata) > 0:
-                ccontainer = plexobjects.PlexContainer(cdata, initpath=cq, server=self, address=cq)
-                self.currentHubs[cdata[0].attrib.get('hubIdentifier')] = cdata[0].attrib.get('title')
-                hubs.append(plexlibrary.Hub(cdata[0], server=self, container=ccontainer))
+            if not skip_continue_watching:
+                cq = '/hubs/continueWatching'
+                if section_ids:
+                    cq += util.joinArgs(params)
+
+                cdata = self.query(cq, params=params)
+                if cdata and len(cdata) > 0:
+                    ccontainer = plexobjects.PlexContainer(cdata, initpath=cq, server=self, address=cq)
+                    self.currentHubs[cdata[0].attrib.get('hubIdentifier')] = cdata[0].attrib.get('title')
+                    hubs.append(plexlibrary.Hub(cdata[0], server=self, container=ccontainer))
 
         if data:
             for elem in data:

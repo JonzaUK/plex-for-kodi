@@ -209,9 +209,10 @@ class ExtendHubTask(backgroundthread.Task):
 class DiscoverHubsTask(backgroundthread.Task):
     """Background task to discover all available hubs across all library sections."""
 
-    def setup(self, sections, callback):
+    def setup(self, sections, callback, cached_hubs=None):
         self.sections = sections  # List of all sections (including home_section)
         self.callback = callback
+        self.cached_hubs = cached_hubs or {}  # Pre-fetched hub data to avoid duplicate HTTP requests
         return self
 
     def run(self):
@@ -232,8 +233,14 @@ class DiscoverHubsTask(backgroundthread.Task):
                 section_type = getattr(section, 'type', 'unknown')
                 section_title = getattr(section, 'title', 'Unknown')
 
-                # Fetch hubs for this section
-                hubs = section.server.hubs(section_key, count=HUB_PAGE_SIZE)
+                # Check if we have cached hubs for this section to avoid HTTP request
+                # This optimization reduces redundant network calls when hub data is already loaded
+                cached_section_hubs = self.cached_hubs.get(section_key)
+                if cached_section_hubs is not None and len(cached_section_hubs) > 0:
+                    hubs = cached_section_hubs
+                else:
+                    # Fetch hubs for this section (HTTP request)
+                    hubs = section.server.hubs(section_key, count=HUB_PAGE_SIZE)
 
                 for hub in hubs:
                     clean_identifier = hub.getCleanHubIdentifier(is_home=(section_key is None))
@@ -999,8 +1006,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         except:
             pass
 
-
-        self.hubDiscoveryTask = DiscoverHubsTask().setup(sections_to_query, self.onHubsDiscovered)
+        # Pass cached hub data to avoid redundant HTTP requests
+        # This optimization reuses already-loaded hub data instead of re-fetching
+        self.hubDiscoveryTask = DiscoverHubsTask().setup(sections_to_query, self.onHubsDiscovered, self.sectionHubs)
         backgroundthread.BGThreader.addTask(self.hubDiscoveryTask)
 
     def onHubsDiscovered(self, availableHubs):
@@ -1038,8 +1046,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 section_type = getattr(section, 'type', 'unknown')
                 section_title = getattr(section, 'title', 'Unknown')
 
-                # Fetch hubs for this section
-                hubs = section.server.hubs(section_key, count=HUB_PAGE_SIZE)
+                # Check if we have cached hubs for this section to avoid HTTP request
+                # This optimization reduces redundant network calls when hub data is already loaded
+                cached_section_hubs = self.sectionHubs.get(section_key)
+                if cached_section_hubs is not None and len(cached_section_hubs) > 0:
+                    hubs = cached_section_hubs
+                else:
+                    # Fetch hubs for this section (HTTP request)
+                    hubs = section.server.hubs(section_key, count=HUB_PAGE_SIZE)
 
                 # For Home section in old Continue Watching mode, split the combined hub
                 if section_key is None and not util.getSetting('use_new_cw', True):
