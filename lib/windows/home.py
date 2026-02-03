@@ -3742,7 +3742,23 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                             util.DEBUG_LOG('Hub {0} updated - refreshing section: {1}'.format(hub.hubIdentifier,
                                                                                               repr(section.title)))
                             hubs[idx] = hub
-                            self.showHub(hub, items=items, reselect_pos=reselect_pos)
+
+                            # Find the hub's slot index in hubControls by identifier
+                            is_home = section.key is None
+                            identifier = hub.getCleanHubIdentifier(is_home=is_home)
+                            hub_slot_index = None
+                            for slot_idx, hubCtrl in enumerate(self.hubControls):
+                                if hubCtrl.dataSource:
+                                    ctrl_identifier = hubCtrl.dataSource.getCleanHubIdentifier(is_home=is_home)
+                                    if ctrl_identifier == identifier:
+                                        hub_slot_index = slot_idx
+                                        break
+
+                            if hub_slot_index is not None:
+                                self.showHub(hub, items=items, reselect_pos=reselect_pos,
+                                             is_home=is_home, hub_index=hub_slot_index)
+                            else:
+                                util.DEBUG_LOG('Hub {0} not found in hubControls, skipping update'.format(identifier))
                             return
 
     def extendHubCallback(self, hub, items, reselect_pos=None):
