@@ -1386,7 +1386,19 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
     def onHubSettingToggle(self, optionsList, mli):
         """Callback when a hub is toggled in the settings dialog."""
         choice = mli.dataSource
-        if not choice or choice.get('key') != 'toggle_hub':
+        if not choice:
+            return
+
+        # Handle Reset to Defaults
+        if choice.get('key') == 'reset_hubs':
+            section_key = getattr(self, '_managingHubsForSection', self.lastSection.key)
+            self.resetSectionHubs(section_key)
+            self._hubsSettingsChanged = True
+            # Refresh the dialog to show default state
+            self._refreshHubSettingsDialog(optionsList, section_key)
+            return
+
+        if choice.get('key') != 'toggle_hub':
             return
 
         catalog_id = choice.get('catalog_id', choice.get('identifier'))
@@ -1804,9 +1816,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         config_key = str(section_key) if section_key is not None else None
         # Get the current hub configuration
         section_config = self.hubSettings.get(config_key, {}) if self.hubSettings else {}
-        configured_hubs = section_config.get('hubs', []) if section_config.get('custom') else []
+        has_custom_config = section_config.get('custom', False)
+        configured_hubs = section_config.get('hubs', []) if has_custom_config else []
 
-        # Build a map of catalog_id to order for enabled hubs
+        # Build a map of catalog_id to order for enabled hubs (only when custom config exists)
         enabled_order = {}
         for idx, hub_config in enumerate(configured_hubs):
             cat_id = hub_config.get('catalog_id', hub_config.get('identifier'))
@@ -1819,7 +1832,26 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 continue
 
             catalog_id = ds.get('catalog_id', ds.get('identifier'))
-            is_enabled = catalog_id in enabled_order
+            hub_info = ds.get('hub_info', {})
+            hub_source_key = hub_info.get('source_section_key')
+            hub_identifier = hub_info.get('identifier', '')
+
+            if has_custom_config:
+                # Custom config: enabled if in the configured list
+                is_enabled = catalog_id in enabled_order
+            else:
+                # Default state: use whitelist for Home, native hubs for libraries
+                if section_key is None:
+                    # Home section defaults
+                    if hub_source_key is None:
+                        # Native Home hub - check whitelist
+                        is_enabled = self.isHomeHubShownByDefault(hub_identifier)
+                    else:
+                        # Cross-section hub - check if it's a Recently Added hub
+                        is_enabled = self.isLibraryHubForHomeDefault(hub_identifier)
+                else:
+                    # Library section - native hubs enabled by default
+                    is_enabled = (str(hub_source_key) == str(section_key) if hub_source_key is not None else False)
 
             # Update enabled state
             ds['enabled'] = is_enabled
@@ -1827,12 +1859,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             mli.setProperty('indicator', indicator)
             mli.setThumbnailImage(indicator)
 
-            # Update display to show position for enabled hubs
-            hub_info = ds.get('hub_info', {})
+            # Update display to show position for enabled hubs (only with custom config)
             base_title = hub_info.get('title', catalog_id)
             source_label = hub_info.get('source_section_title', 'Unknown')
 
-            if is_enabled:
+            if has_custom_config and is_enabled:
                 position = enabled_order[catalog_id]
                 display_title = u'{}. {} [{}]'.format(position, base_title, source_label)
             else:
