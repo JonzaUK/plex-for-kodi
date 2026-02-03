@@ -376,9 +376,6 @@ class DropdownDialog(kodigui.BaseDialog):
                 item = kodigui.ManagedListItem(o['display'], thumbnailImage=o.get('indicator', ''), data_source=ds)
                 item.setProperty('with.indicator', self.withIndicator and '1' or '')
                 item.setProperty('align', self.alignItems)
-                # Support custom text color (e.g., 'destructive' for red)
-                if o.get('color'):
-                    item.setProperty('color', o.get('color'))
                 items.append(item)
                 options.append(o)
             else:
