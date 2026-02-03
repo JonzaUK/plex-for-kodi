@@ -236,7 +236,7 @@ class DiscoverHubsTask(backgroundthread.Task):
                 # Check if we have cached hubs for this section to avoid HTTP request
                 # This optimization reduces redundant network calls when hub data is already loaded
                 cached_section_hubs = self.cached_hubs.get(section_key)
-                if cached_section_hubs is not None and len(cached_section_hubs) > 0:
+                if cached_section_hubs is not None:
                     hubs = cached_section_hubs
                 else:
                     # Fetch hubs for this section (HTTP request)
@@ -1049,7 +1049,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 # Check if we have cached hubs for this section to avoid HTTP request
                 # This optimization reduces redundant network calls when hub data is already loaded
                 cached_section_hubs = self.sectionHubs.get(section_key)
-                if cached_section_hubs is not None and len(cached_section_hubs) > 0:
+                if cached_section_hubs is not None:
                     hubs = cached_section_hubs
                 else:
                     # Fetch hubs for this section (HTTP request)
