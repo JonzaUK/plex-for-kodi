@@ -1366,7 +1366,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             util.ERROR('Hub Settings: Error showing dropdown: {}'.format(e))
             return
 
-        # Handle final choice (Reset)
+        # Handle reopen request (e.g., after Reset to Defaults)
+        if choice and choice.get('reopen'):
+            # Recursively reopen the dialog to show fresh state
+            return self.showHubSettingsDialog()
+
+        # Handle final choice (Reset) - legacy path, kept for safety
         if choice and choice.get('key') == 'reset_hubs':
             self.resetSectionHubs(section_key)
             self._hubsSettingsChanged = True
@@ -1389,14 +1394,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if not choice:
             return
 
-        # Handle Reset to Defaults
+        # Handle Reset to Defaults - close dialog and reopen to show fresh state
         if choice.get('key') == 'reset_hubs':
             section_key = getattr(self, '_managingHubsForSection', self.lastSection.key)
             self.resetSectionHubs(section_key)
             self._hubsSettingsChanged = True
-            # Refresh the dialog to show default state
-            self._refreshHubSettingsDialog(optionsList, section_key)
-            return
+            # Return special value to close dialog, then reopen it
+            return 'close_and_reopen'
 
         if choice.get('key') != 'toggle_hub':
             return

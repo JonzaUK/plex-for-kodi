@@ -341,6 +341,11 @@ class DropdownDialog(kodigui.BaseDialog):
             if result == 'enter_move_mode':
                 self.enterMoveMode(mli)
                 return
+            # Check if callback wants to close and reopen the dialog
+            if result == 'close_and_reopen':
+                self.choice = {'reopen': True}
+                self.doClose()
+                return
 
         del mli
 
