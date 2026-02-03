@@ -77,7 +77,7 @@
                 <texture colordiffuse="D3111111" border="10">script.plex/white-square-rounded.png</texture>
             </control>
             <control type="label">
-                <visible>String.IsEmpty(ListItem.Property(with.indicator)) + String.IsEmpty(ListItem.Property(color))</visible>
+                <visible>String.IsEmpty(ListItem.Property(with.indicator))</visible>
                 <posx>0</posx>
                 <posy>0</posy>
                 <width>300</width>
@@ -90,24 +90,9 @@
                 <scrollspeed>60</scrollspeed>
                 <label>$INFO[ListItem.Label]</label>
             </control>
-            <control type="label">
-                <visible>String.IsEmpty(ListItem.Property(with.indicator)) + String.IsEqual(ListItem.Property(color),destructive)</visible>
-                <posx>0</posx>
-                <posy>0</posy>
-                <width>300</width>
-                <height>{{ vscale(66) }}</height>
-                <font>font12</font>
-                <align>center</align>
-                <aligny>center</aligny>
-                <textcolor>FFFF4444</textcolor>
-                <scroll>true</scroll>
-                <scrollspeed>60</scrollspeed>
-                <label>$INFO[ListItem.Label]</label>
-            </control>
             <control type="group">
                 <visible>!String.IsEmpty(ListItem.Property(with.indicator))</visible>
                 <control type="label">
-                    <visible>String.IsEmpty(ListItem.Property(color))</visible>
                     <posx>20</posx>
                     <posy>0</posy>
                     <width>280</width>
@@ -116,20 +101,6 @@
                     <align>left</align>
                     <aligny>center</aligny>
                     <textcolor>FFFFFFFF</textcolor>
-                    <scroll>true</scroll>
-                    <scrollspeed>60</scrollspeed>
-                    <label>$INFO[ListItem.Label]</label>
-                </control>
-                <control type="label">
-                    <visible>String.IsEqual(ListItem.Property(color),destructive)</visible>
-                    <posx>20</posx>
-                    <posy>0</posy>
-                    <width>280</width>
-                    <height>{{ vscale(66) }}</height>
-                    <font>font12</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>FFFF4444</textcolor>
                     <scroll>true</scroll>
                     <scrollspeed>60</scrollspeed>
                     <label>$INFO[ListItem.Label]</label>
@@ -186,7 +157,7 @@
                 <texture colordiffuse="FFE5A00D" border="10">script.plex/white-square-rounded.png</texture>
             </control>
             <control type="label">
-                <visible>String.IsEmpty(ListItem.Property(with.indicator)) + String.IsEmpty(ListItem.Property(color))</visible>
+                <visible>String.IsEmpty(ListItem.Property(with.indicator))</visible>
                 <posx>0</posx>
                 <posy>0</posy>
                 <width>300</width>
@@ -199,24 +170,9 @@
                 <scrollspeed>60</scrollspeed>
                 <label>$INFO[ListItem.Label]</label>
             </control>
-            <control type="label">
-                <visible>String.IsEmpty(ListItem.Property(with.indicator)) + String.IsEqual(ListItem.Property(color),destructive)</visible>
-                <posx>0</posx>
-                <posy>0</posy>
-                <width>300</width>
-                <height>{{ vscale(66) }}</height>
-                <font>font12</font>
-                <align>center</align>
-                <aligny>center</aligny>
-                <textcolor>FF990000</textcolor>
-                <scroll>true</scroll>
-                <scrollspeed>60</scrollspeed>
-                <label>$INFO[ListItem.Label]</label>
-            </control>
             <control type="group">
                 <visible>!String.IsEmpty(ListItem.Property(with.indicator))</visible>
                 <control type="label">
-                    <visible>String.IsEmpty(ListItem.Property(color))</visible>
                     <posx>20</posx>
                     <posy>0</posy>
                     <width>280</width>
@@ -225,20 +181,6 @@
                     <align>left</align>
                     <aligny>center</aligny>
                     <textcolor>FF000000</textcolor>
-                    <scroll>true</scroll>
-                    <scrollspeed>60</scrollspeed>
-                    <label>$INFO[ListItem.Label]</label>
-                </control>
-                <control type="label">
-                    <visible>String.IsEqual(ListItem.Property(color),destructive)</visible>
-                    <posx>20</posx>
-                    <posy>0</posy>
-                    <width>280</width>
-                    <height>{{ vscale(66) }}</height>
-                    <font>font12</font>
-                    <align>left</align>
-                    <aligny>center</aligny>
-                    <textcolor>FF990000</textcolor>
                     <scroll>true</scroll>
                     <scrollspeed>60</scrollspeed>
                     <label>$INFO[ListItem.Label]</label>
