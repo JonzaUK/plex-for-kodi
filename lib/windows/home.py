@@ -1346,7 +1346,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         # Add Reset option at the end
         options.append(dropdown.SEPARATOR)
-        options.append({'key': 'reset_hubs', 'display': T(34081, "Reset to Default")})
+        options.append({'key': 'reset_hubs', 'display': T(34081, "Reset to Default"), 'color': 'destructive'})
 
         try:
             choice = dropdown.showDropdown(
