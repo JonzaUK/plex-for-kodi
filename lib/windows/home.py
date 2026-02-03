@@ -1368,8 +1368,15 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         # Handle reopen request (e.g., after Reset to Defaults)
         if choice and choice.get('reopen'):
+            # Preserve the flag so refresh happens after reopen
+            settings_changed = self._hubsSettingsChanged
             # Recursively reopen the dialog to show fresh state
-            return self.showHubSettingsDialog(section)
+            self.showHubSettingsDialog(section)
+            # Restore flag and force refresh
+            self._hubsSettingsChanged = settings_changed
+            if settings_changed:
+                self.showHubs(self.lastSection, update=False, force=True)
+            return
 
         # Handle final choice (Reset) - legacy path, kept for safety
         if choice and choice.get('key') == 'reset_hubs':
