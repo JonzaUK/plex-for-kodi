@@ -3726,6 +3726,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def updateHubCallback(self, hub, items=None, reselect_pos=None):
         with self.lock:
+            # First, find and update the hub in its source section's sectionHubs
+            hub_source_section = None
             for mli in self.sectionList:
                 section = mli.dataSource
                 if not section:
@@ -3733,33 +3735,44 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
                 hubs = self.sectionHubs.get(section.key, ())
                 if not hubs:
-                    util.LOG("Hubs for {} not found/no data", section.key)
                     continue
 
                 for idx, ihub in enumerate(hubs):
                     if ihub == hub:
-                        if self.lastSection == section:
-                            util.DEBUG_LOG('Hub {0} updated - refreshing section: {1}'.format(hub.hubIdentifier,
-                                                                                              repr(section.title)))
-                            hubs[idx] = hub
+                        hubs[idx] = hub
+                        hub_source_section = section
+                        break
+                if hub_source_section:
+                    break
 
-                            # Find the hub's slot index in hubControls by identifier
-                            is_home = section.key is None
-                            identifier = hub.getCleanHubIdentifier(is_home=is_home)
-                            hub_slot_index = None
-                            for slot_idx, hubCtrl in enumerate(self.hubControls):
-                                if hubCtrl.dataSource:
-                                    ctrl_identifier = hubCtrl.dataSource.getCleanHubIdentifier(is_home=is_home)
-                                    if ctrl_identifier == identifier:
-                                        hub_slot_index = slot_idx
-                                        break
+            if not hub_source_section:
+                util.DEBUG_LOG('Hub {0} not found in any sectionHubs'.format(hub.hubIdentifier))
+                return
 
-                            if hub_slot_index is not None:
-                                self.showHub(hub, items=items, reselect_pos=reselect_pos,
-                                             is_home=is_home, hub_index=hub_slot_index)
-                            else:
-                                util.DEBUG_LOG('Hub {0} not found in hubControls, skipping update'.format(identifier))
-                            return
+            # Now check if this hub is currently displayed (either on its own section
+            # or as a cross-section hub on the current section like Home)
+            # Check by looking for the hub in hubControls
+            hub_slot_index = None
+            for slot_idx, hubCtrl in enumerate(self.hubControls):
+                if hubCtrl.dataSource == hub:
+                    hub_slot_index = slot_idx
+                    break
+
+            if hub_slot_index is not None:
+                # Hub is currently displayed - determine correct is_home flag
+                # Use the hub's cross-section source if set, otherwise use lastSection
+                cross_source = hub.__dict__.get('_crossSectionSource')
+                if cross_source is not None:
+                    is_home = cross_source is None
+                else:
+                    is_home = self.lastSection.key is None if self.lastSection else False
+
+                util.DEBUG_LOG('Hub {0} updated - refreshing (slot {1}, is_home={2})'.format(
+                    hub.hubIdentifier, hub_slot_index, is_home))
+                self.showHub(hub, items=items, reselect_pos=reselect_pos,
+                             is_home=is_home, hub_index=hub_slot_index)
+            else:
+                util.DEBUG_LOG('Hub {0} updated but not currently displayed'.format(hub.hubIdentifier))
 
     def extendHubCallback(self, hub, items, reselect_pos=None):
         util.DEBUG_LOG('ExtendHub called: {0} [{1}] (reselect: {2})'.format(hub.hubIdentifier, len(hub.items),
