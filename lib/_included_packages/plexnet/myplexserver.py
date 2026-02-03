@@ -114,7 +114,8 @@ class PlexDiscoverServer(MyPlexServer):
             'includeExternalMetadata': '1',
         }
 
-        # fetch hub data
+        # fetch hub data - only for hubs that weren't already filtered out
+        # This optimization avoids HTTP requests for hubs that will be hidden
         for hub in hubs:
             params = base_params.copy()
             params.update(wanted_hubs_dict[hub.key])
