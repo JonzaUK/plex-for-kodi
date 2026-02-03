@@ -245,7 +245,7 @@
         <visible>Integer.IsGreater(Container({{ hub.hub_id }}).NumItems,0) + String.IsEmpty(Window.Property(drawing))</visible>
         <defaultcontrol>{{ hub.hub_id }}</defaultcontrol>
         <width>1920</width>
-        <height>{{ vscale(515) }}</height>
+        <height>{{ vscale(535) }}</height>
         <control type="image">
             <visible>!String.IsEmpty(Window.Property(bifurcation_lines))</visible>
             <posx>60</posx>
@@ -288,11 +288,6 @@
             {% include "includes/hub_focusedlayout_square.xml.tpl" %}
             {% include "includes/hub_focusedlayout_ar16x9.xml.tpl" %}
         </control>
-    </control>
-    <control type="group" id="{{ hub.spacer_id }}">
-        <visible>Integer.IsGreater(Container({{ hub.hub_id }}).NumItems,0) + !String.IsEmpty(Window.Property(hub.text2lines.{{ hub.hub_id }}))</visible>
-        <width>10</width>
-        <height>{{ vscale(7) }}</height>
     </control>
     {% endfor %}
 
