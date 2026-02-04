@@ -157,6 +157,7 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
             if count is not None:
                 params['limit'] = count
         else:
+            q = '/hubs'
             if section:
                 if section == 'playlists':
                     audio = plexlibrary.AudioPlaylistHub(False, server=self.server)
@@ -169,8 +170,7 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
                 else:
                     q = '/hubs/sections/%s' % section
             else:
-                # home hub - use /hubs/promoted for per-library hubs like Plex Web
-                q = '/hubs/promoted'
+                # home hub
                 if section_ids:
                     params['pinnedContentDirectoryID'] = ",".join(section_ids)
 
