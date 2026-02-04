@@ -565,39 +565,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
     }
 
     # Native Home hub identifiers that SHOULD be shown by default (whitelist approach)
-    # Any native Home hub NOT in this list is hidden by default
-    # Users can enable/disable any hub via Manage Hubs after first launch
-    HOME_HUBS_SHOWN_BY_DEFAULT = {
-        'continueWatching',  # New combined Continue Watching mode
-        'home.continue',     # Old split mode - episodes
-        'home.ondeck',       # Old split mode - movies/shows
-    }
-
     # Settings version for migration - increment when defaults change
+    # Version 1: Reset Home config so upgrading users get native Plex Home hubs
     HUB_SETTINGS_VERSION = 1
-
-    # Per-library hub identifier patterns that should be shown on Home by default
-    # These replace the merged "Recently Added" hubs
-    # Using a pattern match instead of exact list to handle all library types
-    LIBRARY_HUBS_FOR_HOME_DEFAULT_PATTERNS = (
-        '.recentlyadded',  # Matches movie.recentlyadded, show.recentlyadded, etc.
-        '.recent.added',   # Matches music.recent.added (music libraries use different format)
-    )
-
-    @classmethod
-    def isHomeHubShownByDefault(cls, identifier):
-        """Check if a native Home hub should be shown by default."""
-        return identifier in cls.HOME_HUBS_SHOWN_BY_DEFAULT
-
-    @classmethod
-    def isLibraryHubForHomeDefault(cls, identifier):
-        """Check if a library hub identifier should be shown on Home by default."""
-        if not identifier:
-            return False
-        for pattern in cls.LIBRARY_HUBS_FOR_HOME_DEFAULT_PATTERNS:
-            if identifier.endswith(pattern):
-                return True
-        return False
 
     THUMB_POSTER_DIM = util.scaleResolution(244, 361)
     THUMB_AR16X9_DIM = util.scaleResolution(532, 299)
@@ -1094,12 +1064,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_config = self.hubSettings.get(config_key) if self.hubSettings else None
 
         if not section_config or not section_config.get('custom'):
-            # No custom config - use smart defaults for Home section
-            if section_key is None:
-                # Only show whitelisted native Home hubs by default
-                # Users see per-library Recently Added hubs instead of merged ones
-                if not self.isHomeHubShownByDefault(identifier):
-                    return True
+            # No custom config - show all native hubs from Plex
             return False
 
         # Build catalog_id for this hub in this section
@@ -1221,18 +1186,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 is_enabled = catalog_id in configured_catalog_ids
             else:
                 hub_source_key = hub_info.get('source_section_key')
-                hub_identifier = hub_info.get('identifier', '')
 
                 if section_key is None:
-                    # Home section defaults:
-                    # - Show only whitelisted native Home hubs (Continue Watching, On Deck)
-                    # - Show per-library Recently Added hubs
-                    if hub_source_key is None:
-                        # Native Home hub - check if it's in the whitelist
-                        is_enabled = self.isHomeHubShownByDefault(hub_identifier)
-                    else:
-                        # Cross-section hub - enable if it's a Recently Added hub
-                        is_enabled = self.isLibraryHubForHomeDefault(hub_identifier)
+                    # Home section - all native Plex Home hubs are enabled by default
+                    is_enabled = (hub_source_key is None)
                 else:
                     # Library section - native hubs enabled by default (compare as strings)
                     is_enabled = (str(hub_source_key) == str(section_key) if hub_source_key is not None else False)
@@ -1291,20 +1248,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                     is_enabled, hub_info = hub_states[catalog_id]
                     if is_enabled:
                         ordered_catalog_ids.append((catalog_id, hub_info))
-
-            # For Home, also add per-library Recently Added hubs in their cached order
-            if is_home:
-                for lib_section_key, lib_hubs in self.sectionHubs.items():
-                    if lib_section_key is None or not lib_hubs:
-                        continue
-                    for hub in lib_hubs:
-                        identifier = hub.getCleanHubIdentifier(is_home=False)
-                        if self.isLibraryHubForHomeDefault(identifier):
-                            catalog_id = '{}:{}'.format(lib_section_key, identifier)
-                            if catalog_id in hub_states and catalog_id not in [x[0] for x in ordered_catalog_ids]:
-                                is_enabled, hub_info = hub_states[catalog_id]
-                                if is_enabled:
-                                    ordered_catalog_ids.append((catalog_id, hub_info))
 
             for idx, (catalog_id, hub_info) in enumerate(ordered_catalog_ids):
                 options.append(make_option(catalog_id, hub_info, True, position=idx + 1))
@@ -1461,6 +1404,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             # Get hubs from sectionHubs in their actual display order
             cached_hubs = self.sectionHubs.get(section_key, [])
 
+            # Add all native hubs in screen order (same logic for Home and libraries)
             for hub in cached_hubs:
                 hub_identifier = hub.getCleanHubIdentifier(is_home=is_home)
                 if is_home:
@@ -1468,35 +1412,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 else:
                     cat_id = '{}:{}'.format(section_key, hub_identifier)
 
-                # Check if this hub should be enabled by default
-                should_enable = True
-                if is_home:
-                    should_enable = self.isHomeHubShownByDefault(hub_identifier)
-
-                if should_enable and cat_id in self.availableHubs:
+                if cat_id in self.availableHubs:
                     section_config['hubs'].append({
                         'catalog_id': cat_id,
                         'identifier': hub_identifier,
                         'order': len(section_config['hubs'])
                     })
-
-            # For Home, also add per-library Recently Added hubs in their cached order
-            if is_home:
-                for lib_section_key, lib_hubs in self.sectionHubs.items():
-                    if lib_section_key is None or not lib_hubs:
-                        continue
-                    for hub in lib_hubs:
-                        hub_identifier = hub.getCleanHubIdentifier(is_home=False)
-                        if self.isLibraryHubForHomeDefault(hub_identifier):
-                            cat_id = '{}:{}'.format(lib_section_key, hub_identifier)
-                            # Avoid duplicates
-                            existing_ids = {h.get('catalog_id') for h in section_config['hubs']}
-                            if cat_id not in existing_ids and cat_id in self.availableHubs:
-                                section_config['hubs'].append({
-                                    'catalog_id': cat_id,
-                                    'identifier': hub_identifier,
-                                    'order': len(section_config['hubs'])
-                                })
 
         # Find and update the hub in the config
         hub_found = False
@@ -1724,7 +1645,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         is_home = config_key is None
         cached_hubs = self.sectionHubs.get(section_key, [])
 
-        # First add native hubs in screen order
+        # Add all native hubs in screen order (same logic for Home and libraries)
         for hub in cached_hubs:
             hub_identifier = hub.getCleanHubIdentifier(is_home=is_home)
             if is_home:
@@ -1732,36 +1653,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             else:
                 cat_id = '{}:{}'.format(section_key, hub_identifier)
 
-            # Check if this hub should be enabled by default
-            if is_home:
-                should_enable = self.isHomeHubShownByDefault(hub_identifier)
-            else:
-                should_enable = True  # All native library hubs enabled by default
-
-            if should_enable and cat_id in self.availableHubs:
+            if cat_id in self.availableHubs:
                 section_config['hubs'].append({
                     'catalog_id': cat_id,
                     'identifier': hub_identifier,
                     'order': len(section_config['hubs'])
                 })
-
-        # For Home, also add per-library Recently Added hubs in their cached order
-        if is_home:
-            for lib_section_key, lib_hubs in self.sectionHubs.items():
-                if lib_section_key is None or not lib_hubs:
-                    continue
-                for hub in lib_hubs:
-                    hub_identifier = hub.getCleanHubIdentifier(is_home=False)
-                    if self.isLibraryHubForHomeDefault(hub_identifier):
-                        cat_id = '{}:{}'.format(lib_section_key, hub_identifier)
-                        # Avoid duplicates
-                        existing_ids = {h.get('catalog_id') for h in section_config['hubs']}
-                        if cat_id not in existing_ids and cat_id in self.availableHubs:
-                            section_config['hubs'].append({
-                                'catalog_id': cat_id,
-                                'identifier': hub_identifier,
-                                'order': len(section_config['hubs'])
-                            })
 
         self.saveHubSettings()
         self._hubsSettingsChanged = True
@@ -1865,15 +1762,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 # Custom config: enabled if in the configured list
                 is_enabled = catalog_id in enabled_order
             else:
-                # Default state: use whitelist for Home, native hubs for libraries
+                # Default state: all native hubs for the current section are enabled
                 if section_key is None:
-                    # Home section defaults
-                    if hub_source_key is None:
-                        # Native Home hub - check whitelist
-                        is_enabled = self.isHomeHubShownByDefault(hub_identifier)
-                    else:
-                        # Cross-section hub - check if it's a Recently Added hub
-                        is_enabled = self.isLibraryHubForHomeDefault(hub_identifier)
+                    # Home section - all native Plex Home hubs enabled
+                    is_enabled = (hub_source_key is None)
                 else:
                     # Library section - native hubs enabled by default
                     is_enabled = (str(hub_source_key) == str(section_key) if hub_source_key is not None else False)
@@ -1958,40 +1850,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         return enabled
 
-    def _getDefaultHomeHubs(self, native_hubs):
-        """Get default hubs for Home section - per-library Recently Added instead of merged.
-
-        Returns native Home hubs (minus hidden-by-default merged ones) plus
-        per-library Recently Added hubs from each library section that are already cached.
-        """
-        combined = []
-
-        # Add only whitelisted native Home hubs (Continue Watching, On Deck)
-        for hub in native_hubs:
-            identifier = hub.getCleanHubIdentifier(is_home=True)
-            if self.isHomeHubShownByDefault(identifier):
-                combined.append(hub)
-
-        # Add per-library Recently Added hubs from already-cached library sections
-        # (No need to call library.sections() - we use whatever is already in sectionHubs.
-        #  Missing sections will be added when their background fetch completes and Home refreshes.)
-        for section_key, section_hubs in self.sectionHubs.items():
-            if section_key is None or not section_hubs:
-                continue  # Skip Home section
-
-            for hub in section_hubs:
-                identifier = hub.getCleanHubIdentifier(is_home=False)
-                if self.isLibraryHubForHomeDefault(identifier):
-                    hub._crossSectionSource = section_key
-                    hub._catalogId = '{}:{}'.format(section_key, identifier)
-                    combined.append(hub)
-
-        result = HubsList(combined)
-        result.lastUpdated = native_hubs.lastUpdated
-        result.invalid = native_hubs.invalid
-
-        return result
-
     def getCombinedHubsForSection(self, section, include_cross_section=True):
         """Get combined list of hubs for a section, including cross-section hubs if enabled."""
         section_key = section.key
@@ -2004,18 +1862,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         # Check if we have custom config with cross-section hubs
         if not include_cross_section:
-            # For Home with no custom config, only show whitelisted hubs
-            if section_key is None:
-                filtered = []
-                for hub in native_hubs:
-                    identifier = hub.getCleanHubIdentifier(is_home=True)
-                    if self.isHomeHubShownByDefault(identifier):
-                        filtered.append(hub)
-                if len(filtered) != len(native_hubs):
-                    result = HubsList(filtered)
-                    result.lastUpdated = native_hubs.lastUpdated
-                    result.invalid = native_hubs.invalid
-                    return result
             return native_hubs
 
         # Normalize key to string (hubSettings uses string keys)
@@ -2025,10 +1871,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             section_config = self.hubSettings.get(config_key)
 
         if not section_config or not section_config.get('custom'):
-            # For Home with no custom config, filter hidden-by-default hubs
-            # and include per-library Recently Added hubs
-            if section_key is None:
-                return self._getDefaultHomeHubs(native_hubs)
+            # No custom config - show native hubs from Plex as-is
             return native_hubs
 
         # Get enabled hub catalog_ids
