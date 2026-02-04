@@ -288,27 +288,59 @@ class Role(MediaTag):
     def getDetails(self):
         """
         Fetch full actor metadata including biography, birth date, photo, etc.
-        Returns a dict with actor details or None if not available.
+        Uses the search endpoint with people type to find actor details.
+        Returns a dict with actor details.
         """
-        if not self.id:
+        if not self.tag:
             return self._getBasicDetails()
 
         try:
-            path = '/library/metadata/{0}'.format(self.id)
-            data = self.server.query(path)
-            if data is not None and len(data) > 0:
-                elem = data[0]
-                # Parse any element type - Plex may return Directory, Person, or other types
-                return {
-                    'id': elem.get('ratingKey', self.id),
-                    'name': elem.get('title', elem.get('tag', self.tag)),
-                    'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
-                    'summary': elem.get('summary', ''),
-                    'birthDate': elem.get('birthDate', ''),
-                    'deathDate': elem.get('deathDate', ''),
-                    'birthPlace': elem.get('birthPlace', ''),
-                    'role': getattr(self, 'role', ''),
-                }
+            # Search for the actor using the people search type
+            path = '/hubs/search'
+            params = {
+                'query': self.tag,
+                'searchTypes': 'people',
+                'limit': 5
+            }
+            data = self.server.query(path, params=params)
+            
+            if data is not None:
+                # Find the Hub with type="people" or containing actor data
+                for hub in data.findall('Hub'):
+                    hub_type = hub.get('type', '')
+                    if hub_type in ('people', 'actor', 'person'):
+                        # Look for matching actor in hub results
+                        for elem in hub:
+                            elem_tag = elem.get('tag', elem.get('title', ''))
+                            # Match by name (case-insensitive)
+                            if elem_tag.lower() == self.tag.lower():
+                                util.DEBUG_LOG('Found actor details for {0} via search'.format(self.tag))
+                                return {
+                                    'id': elem.get('ratingKey', elem.get('id', self.id)),
+                                    'name': elem.get('tag', elem.get('title', self.tag)),
+                                    'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
+                                    'summary': elem.get('summary', ''),
+                                    'birthDate': elem.get('birthDate', ''),
+                                    'deathDate': elem.get('deathDate', ''),
+                                    'birthPlace': elem.get('birthPlace', ''),
+                                    'role': getattr(self, 'role', ''),
+                                }
+                        # If no exact match, use first result
+                        if len(hub) > 0:
+                            elem = hub[0]
+                            util.DEBUG_LOG('Using first search result for actor {0}'.format(self.tag))
+                            return {
+                                'id': elem.get('ratingKey', elem.get('id', self.id)),
+                                'name': elem.get('tag', elem.get('title', self.tag)),
+                                'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
+                                'summary': elem.get('summary', ''),
+                                'birthDate': elem.get('birthDate', ''),
+                                'deathDate': elem.get('deathDate', ''),
+                                'birthPlace': elem.get('birthPlace', ''),
+                                'role': getattr(self, 'role', ''),
+                            }
+            
+            util.DEBUG_LOG('No people hub found in search results for {0}'.format(self.tag))
         except Exception as e:
             util.DEBUG_LOG('Failed to fetch actor details for {0}: {1}'.format(self.tag, e))
 
