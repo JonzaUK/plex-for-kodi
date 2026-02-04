@@ -285,6 +285,69 @@ class Role(MediaTag):
 
         return roles or None
 
+    def getDetails(self):
+        """
+        Fetch full actor metadata including biography, birth date, photo, etc.
+        Returns a dict with actor details or None if not available.
+        """
+        if not self.id:
+            return None
+
+        try:
+            path = '/library/metadata/{0}'.format(self.id)
+            data = self.server.query(path)
+            if data is not None and len(data) > 0:
+                elem = data[0]
+                # Handle both Directory (person) and Video elements
+                tag_name = elem.tag
+                if tag_name in ('Directory', 'Person'):
+                    return {
+                        'id': elem.get('ratingKey', self.id),
+                        'name': elem.get('title', self.tag),
+                        'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
+                        'summary': elem.get('summary', ''),
+                        'birthDate': elem.get('birthDate', ''),
+                        'deathDate': elem.get('deathDate', ''),
+                        'birthPlace': elem.get('birthPlace', ''),
+                        'role': getattr(self, 'role', ''),
+                    }
+        except Exception as e:
+            util.DEBUG_LOG('Failed to fetch actor details for {0}: {1}'.format(self.tag, e))
+
+        # Return basic info if API call fails
+        return {
+            'id': self.id,
+            'name': self.tag,
+            'thumb': str(self.thumb) if self.thumb else '',
+            'summary': '',
+            'birthDate': '',
+            'deathDate': '',
+            'birthPlace': '',
+            'role': getattr(self, 'role', ''),
+        }
+
+    def getFilmography(self, media_type=None):
+        """
+        Get all movies/shows this actor appears in from your library.
+        media_type: 'movie', 'show', or None for all
+        """
+        hubs = self.server.hubs(count=50, search_query=self.tag)
+        items = []
+
+        for hub in hubs:
+            if media_type:
+                if media_type == 'movie' and hub.type != 'movie':
+                    continue
+                if media_type == 'show' and hub.type != 'show':
+                    continue
+
+            if hub.type in ('movie', 'show'):
+                for item in hub.items:
+                    # Check if this actor is actually in the item's cast
+                    items.append(item)
+
+        return items
+
 
 class Similar(MediaTag):
     TYPE = 'Similar'
