@@ -409,16 +409,30 @@ class Role(MediaTag):
             'role': getattr(self, 'role', ''),
         }
 
-    def getFilmography(self, media_type=None):
+    def getFilmography(self, media_type=None, start=None, size=None):
         """
-        Get all movies/shows this actor appears in from your library.
+        Get movies/shows this actor appears in from your library.
         Uses /library/people/{personId}/media endpoint per Plex API docs.
-        media_type: 'movie', 'show', or None for all
+        
+        Args:
+            media_type: 'movie', 'show', or None for all
+            start: Starting offset for pagination (X-Plex-Container-Start)
+            size: Number of items to fetch (X-Plex-Container-Size)
+        
+        Returns:
+            dict with 'items', 'offset', 'size', 'totalSize', and 'more' keys
         
         Note: The Plex discover API does not provide an endpoint for actor filmography,
         so only local library content is returned.
         """
         items = []
+        result = {
+            'items': items,
+            'offset': start or 0,
+            'size': 0,
+            'totalSize': 0,
+            'more': False
+        }
         
         try:
             # Use the proper people media endpoint
@@ -427,18 +441,27 @@ class Role(MediaTag):
                 person_id = self.tagKey
             
             path = '/library/people/{0}/media'.format(person_id)
+            
+            # Add pagination headers as query params
+            args = {}
+            if size is not None:
+                args['X-Plex-Container-Start'] = start if start is not None else 0
+                args['X-Plex-Container-Size'] = size
+            
+            if args:
+                path += util.joinArgs(args)
+            
             data = self.server.query(path)
             
             if data is not None:
+                # Get pagination info from response
+                result['offset'] = int(data.get('offset', start or 0))
+                result['size'] = int(data.get('size', 0))
+                result['totalSize'] = int(data.get('totalSize', 0))
+                
                 # Debug: Log the raw response structure
-                util.DEBUG_LOG('Filmography API response tag: {0}, attribs: {1}'.format(data.tag, list(data.attrib.keys())))
-                child_count = 0
-                for child in data:
-                    child_count += 1
-                    if child_count <= 3:  # Only log first 3 to avoid spam
-                        util.DEBUG_LOG('  Filmography child: {0}, type={1}, title={2}'.format(
-                            child.tag, child.get('type', 'N/A'), child.get('title', 'N/A')))
-                util.DEBUG_LOG('  Total child elements: {0}'.format(child_count))
+                util.DEBUG_LOG('Filmography API response: offset={0}, size={1}, totalSize={2}'.format(
+                    result['offset'], result['size'], result['totalSize']))
                 
                 from . import video  # Import here to avoid circular imports
                 
@@ -462,13 +485,22 @@ class Role(MediaTag):
                             item = video.Show(elem, self.initpath, self.server)
                         items.append(item)
                 
-                util.DEBUG_LOG('Found {0} filmography items for {1}'.format(len(items), self.tag))
+                # Calculate if there are more items
+                result['size'] = len(items)
+                result['more'] = (result['offset'] + result['size']) < result['totalSize']
+                
+                util.DEBUG_LOG('Found {0} filmography items for {1} (more={2})'.format(
+                    len(items), self.tag, result['more']))
         except Exception as e:
             util.DEBUG_LOG('Failed to fetch filmography for {0}: {1}'.format(self.tag, e))
             # Fallback to search-based approach
-            items = self._getFilmographyViaSearch(media_type)
+            fallback_items = self._getFilmographyViaSearch(media_type)
+            result['items'] = fallback_items
+            result['size'] = len(fallback_items)
+            result['totalSize'] = len(fallback_items)
+            result['more'] = False
         
-        return items
+        return result
     
     def _getFilmographyViaSearch(self, media_type=None):
         """Fallback filmography fetch using hub search."""

@@ -19,6 +19,9 @@ from . import opener
 from . import search
 from . import windowutils
 
+# Pagination settings
+FILMOGRAPHY_PAGE_SIZE = 10
+
 
 class ActorDetailsTask(backgroundthread.Task):
     """Background task to fetch actor details from the server"""
@@ -38,21 +41,52 @@ class ActorDetailsTask(backgroundthread.Task):
 
 
 class ActorFilmographyTask(backgroundthread.Task):
-    """Background task to fetch actor's filmography"""
-    def __init__(self, role, media_type, callback):
+    """Background task to fetch actor's filmography with pagination"""
+    def __init__(self, role, media_type, callback, start=0, size=FILMOGRAPHY_PAGE_SIZE):
         super(ActorFilmographyTask, self).__init__()
         self.role = role
         self.media_type = media_type
         self.callback = callback
+        self.start = start
+        self.size = size
 
     def run(self):
         if self.isCanceled():
             return
 
-        items = self.role.getFilmography(self.media_type)
+        result = self.role.getFilmography(self.media_type, start=self.start, size=self.size)
 
         if not self.isCanceled():
-            self.callback(items)
+            self.callback(result)
+
+
+class ExtendFilmographyTask(backgroundthread.Task):
+    """Background task to fetch more filmography items"""
+    def setup(self, role, start, size, callback, canceledCallback=None):
+        self.role = role
+        self.start = start
+        self.size = size
+        self.callback = callback
+        self.canceledCallback = canceledCallback
+        return self
+
+    def run(self):
+        if self.isCanceled():
+            if self.canceledCallback:
+                self.canceledCallback()
+            return
+
+        try:
+            result = self.role.getFilmography(None, start=self.start, size=self.size)
+            if self.isCanceled():
+                if self.canceledCallback:
+                    self.canceledCallback()
+                return
+            self.callback(result)
+        except Exception as e:
+            util.DEBUG_LOG('ExtendFilmographyTask failed: {0}'.format(e))
+            if self.canceledCallback:
+                self.canceledCallback()
 
 
 class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
@@ -76,6 +110,9 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         self.role = kwargs.get('role')
         self.actorDetails = None
         self.filmographyItems = []
+        self.filmographyOffset = 0
+        self.filmographyTotalSize = 0
+        self.filmographyMore = False
         self.tasks = backgroundthread.Tasks()
         self.exitCommand = None
         self.initialized = False
@@ -103,10 +140,30 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             if action in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
                 self.doClose()
                 return
+
+            # Handle filmography pagination when user scrolls to end marker
+            if controlID == self.FILMOGRAPHY_LIST_ID:
+                if self.checkFilmographyPagination(action):
+                    return
         except Exception:
             util.ERROR()
 
         kodigui.ControlledWindow.onAction(self, action)
+
+    def checkFilmographyPagination(self, action):
+        """Check if we need to load more filmography items"""
+        mli = self.filmographyListControl.getSelectedItem()
+        if not mli:
+            return False
+
+        # Check if we're on the "load more" marker
+        if mli.getProperty('is.end') and not mli.getProperty('is.updating'):
+            # User scrolled to the end marker, load more items
+            mli.setBoolProperty('is.updating', True)
+            self.extendFilmography()
+            return True
+
+        return False
 
     def onClick(self, controlID):
         if controlID == self.HOME_BUTTON_ID:
@@ -132,9 +189,68 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
 
     def fetchFilmography(self):
         self.setProperty('loading', '1')
-        task = ActorFilmographyTask(self.role, None, self.onFilmography)
+        task = ActorFilmographyTask(self.role, None, self.onFilmography, start=0, size=FILMOGRAPHY_PAGE_SIZE)
         self.tasks.add(task)
         backgroundthread.BGThreader.addTask(task)
+
+    def extendFilmography(self):
+        """Fetch more filmography items"""
+        start = self.filmographyOffset + len(self.filmographyItems)
+        task = ExtendFilmographyTask().setup(
+            self.role,
+            start=start,
+            size=FILMOGRAPHY_PAGE_SIZE,
+            callback=self.onFilmographyExtended,
+            canceledCallback=self.onFilmographyExtendCanceled
+        )
+        self.tasks.add(task)
+        backgroundthread.BGThreader.addTask(task)
+
+    def onFilmographyExtendCanceled(self):
+        """Handle extension task cancellation"""
+        # Find and clear the is.updating property on the end marker
+        for mli in self.filmographyListControl:
+            if mli.getProperty('is.end'):
+                mli.setBoolProperty('is.updating', False)
+                break
+
+    def onFilmographyExtended(self, result):
+        """Handle additional filmography items"""
+        items = result.get('items', [])
+        self.filmographyMore = result.get('more', False)
+        self.filmographyTotalSize = result.get('totalSize', 0)
+
+        if not items:
+            # No more items, remove the end marker
+            self.onFilmographyExtendCanceled()
+            return
+
+        # Add new items to our list
+        self.filmographyItems.extend(items)
+
+        # Create list items for the new items
+        newListItems = []
+        for item in items:
+            mli = self.createFilmographyListItem(item)
+            newListItems.append(mli)
+
+        # Add end marker if there are more items
+        if self.filmographyMore:
+            end = kodigui.ManagedListItem('')
+            end.setBoolProperty('is.end', True)
+            newListItems.append(end)
+
+        # Replace the old end marker with new items
+        endPos = self.filmographyListControl.size() - 1
+        self.filmographyListControl.replaceItem(endPos, newListItems[0])
+        if len(newListItems) > 1:
+            self.filmographyListControl.addItems(newListItems[1:])
+
+        # Select the first new item
+        self.filmographyListControl.selectItem(endPos)
+
+        # Update count
+        self.setProperty('filmography.count', str(len(self.filmographyItems)))
 
     def onActorDetails(self, details):
         if not details:
@@ -171,48 +287,66 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         if thumb:
             self.setProperty('actor.thumb', self.role.server.getImageTranscodeURL(thumb, *self.THUMB_DIM))
 
-    def onFilmography(self, items):
+    def onFilmography(self, result):
         self.setProperty('loading', '')
-        self.filmographyItems = items or []
+        
+        # Handle the new result format with pagination info
+        items = result.get('items', [])
+        self.filmographyItems = items
+        self.filmographyOffset = result.get('offset', 0)
+        self.filmographyTotalSize = result.get('totalSize', len(items))
+        self.filmographyMore = result.get('more', False)
+        
         self.fillFilmography()
 
+    def createFilmographyListItem(self, item):
+        """Create a ManagedListItem for a filmography item"""
+        title = item.title if hasattr(item, 'title') else item.get('title', '')
+        year = ''
+        if hasattr(item, 'year'):
+            year = str(item.year) if item.year else ''
+
+        thumb = ''
+        if hasattr(item, 'thumb') and item.thumb:
+            thumb = item.thumb.asTranscodedImageURL(*self.POSTER_DIM)
+        elif hasattr(item, 'defaultThumb') and item.defaultThumb:
+            thumb = item.defaultThumb.asTranscodedImageURL(*self.POSTER_DIM)
+
+        mli = kodigui.ManagedListItem(title, year, thumbnailImage=thumb, data_source=item)
+
+        # Set type indicator
+        item_type = item.type if hasattr(item, 'type') else item.TYPE if hasattr(item, 'TYPE') else ''
+        mli.setProperty('media.type', item_type)
+
+        # Set watched indicator
+        if hasattr(item, 'isWatched') and item.isWatched:
+            mli.setProperty('watched', '1')
+
+        # Thumb fallback
+        mli.setProperty('thumb.fallback', 'script.plex/thumb_fallbacks/{0}.png'.format(
+            item_type in ('show', 'season', 'episode') and 'show' or 'movie'))
+
+        return mli
+
     def fillFilmography(self):
-        """Populate the filmography list with all items."""
+        """Populate the filmography list with initial items."""
         listItems = []
 
         for item in self.filmographyItems:
-            title = item.title if hasattr(item, 'title') else item.get('title', '')
-            year = ''
-            if hasattr(item, 'year'):
-                year = str(item.year) if item.year else ''
-
-            thumb = ''
-            if hasattr(item, 'thumb') and item.thumb:
-                thumb = item.thumb.asTranscodedImageURL(*self.POSTER_DIM)
-            elif hasattr(item, 'defaultThumb') and item.defaultThumb:
-                thumb = item.defaultThumb.asTranscodedImageURL(*self.POSTER_DIM)
-
-            mli = kodigui.ManagedListItem(title, year, thumbnailImage=thumb, data_source=item)
-
-            # Set type indicator
-            item_type = item.type if hasattr(item, 'type') else item.TYPE if hasattr(item, 'TYPE') else ''
-            mli.setProperty('media.type', item_type)
-
-            # Set watched indicator
-            if hasattr(item, 'isWatched') and item.isWatched:
-                mli.setProperty('watched', '1')
-
-            # Thumb fallback
-            mli.setProperty('thumb.fallback', 'script.plex/thumb_fallbacks/{0}.png'.format(
-                item_type in ('show', 'season', 'episode') and 'show' or 'movie'))
-
+            mli = self.createFilmographyListItem(item)
             listItems.append(mli)
+
+        # Add "load more" end marker if there are more items
+        if self.filmographyMore:
+            end = kodigui.ManagedListItem('')
+            end.setBoolProperty('is.end', True)
+            listItems.append(end)
 
         self.filmographyListControl.reset()
         self.filmographyListControl.addItems(listItems)
 
         # Update count
-        self.setProperty('filmography.count', str(len(listItems)))
+        self.setProperty('filmography.count', str(len(self.filmographyItems)))
 
     def filmographyItemClicked(self):
         mli = self.filmographyListControl.getSelectedItem()

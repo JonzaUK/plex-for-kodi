@@ -185,13 +185,5 @@ def directorClicked(director, **kwargs):
 
 
 def actorClicked(actor, **kwargs):
-    # Check if we should use new actor detail window or legacy filter view
-    use_actor_window = kwargs.pop('use_actor_window', True)
-    if use_actor_window:
-        from . import actor as actor_window
-        return handleOpen(actor_window.ActorWindow, role=actor, **kwargs)
-    else:
-        # Legacy behavior - open library with filter
-        section = plexlibrary.LibrarySection.fromFilter(actor)
-        filter_ = {'type': actor.FILTER, 'display': 'Actor', 'sub': {'val': actor.id, 'display': actor.tag}}
-        return sectionClicked(section, filter_, ignoreLibrarySettings=True, **kwargs)
+    from . import actor as actor_window
+    return handleOpen(actor_window.ActorWindow, role=actor, **kwargs)
