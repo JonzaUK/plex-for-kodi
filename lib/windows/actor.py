@@ -177,6 +177,7 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         self.fillFilmography()
 
     def fillFilmography(self):
+        """Populate the filmography list with all items."""
         listItems = []
 
         for item in self.filmographyItems:
@@ -200,6 +201,10 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             # Set watched indicator
             if hasattr(item, 'isWatched') and item.isWatched:
                 mli.setProperty('watched', '1')
+
+            # Thumb fallback
+            mli.setProperty('thumb.fallback', 'script.plex/thumb_fallbacks/{0}.png'.format(
+                item_type in ('show', 'season', 'episode') and 'show' or 'movie'))
 
             listItems.append(mli)
 
