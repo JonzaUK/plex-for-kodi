@@ -26,52 +26,6 @@
     <posx>0</posx>
     <posy>0</posy>
 
-    <!-- Top Navigation -->
-    <control type="group" id="200">
-        <posx>60</posx>
-        <posy>{{ vscale(27) }}</posy>
-        <width>1800</width>
-        <height>{{ vscale(70) }}</height>
-
-        <control type="button" id="201">
-            <posx>0</posx>
-            <posy>0</posy>
-            <width>101</width>
-            <height>{{ vscale(70) }}</height>
-            <ondown>400</ondown>
-            <font>font12</font>
-            <texturefocus colordiffuse="FFE5A00D">script.plex/buttons/home-focus.png</texturefocus>
-            <texturenofocus colordiffuse="99FFFFFF">script.plex/buttons/home.png</texturenofocus>
-            <label> </label>
-        </control>
-
-        <control type="button" id="202">
-            <posx>120</posx>
-            <posy>0</posy>
-            <width>101</width>
-            <height>{{ vscale(70) }}</height>
-            <ondown>400</ondown>
-            <font>font12</font>
-            <texturefocus colordiffuse="FFE5A00D">script.plex/buttons/search-focus.png</texturefocus>
-            <texturenofocus colordiffuse="99FFFFFF">script.plex/buttons/search.png</texturenofocus>
-            <label> </label>
-        </control>
-
-        <!-- Player Status Button -->
-        <control type="button" id="204">
-            <visible>Player.HasAudio</visible>
-            <posx>1658</posx>
-            <posy>0</posy>
-            <width>101</width>
-            <height>{{ vscale(70) }}</height>
-            <ondown>400</ondown>
-            <font>font12</font>
-            <texturefocus colordiffuse="FFE5A00D">script.plex/buttons/player-focus.png</texturefocus>
-            <texturenofocus colordiffuse="99FFFFFF">script.plex/buttons/player.png</texturenofocus>
-            <label> </label>
-        </control>
-    </control>
-
     <!-- Actor Details Section -->
     <control type="group">
         <posx>60</posx>
@@ -174,6 +128,8 @@
                 <font>font12</font>
                 <align>left</align>
                 <textcolor>CCFFFFFF</textcolor>
+                <scrolltime>200</scrolltime>
+                <autoscroll delay="3000" time="3000" repeat="5000"></autoscroll>
                 <label>$INFO[Window.Property(actor.summary)]</label>
             </control>
         </control>
@@ -197,38 +153,6 @@
             <textcolor>FFFFFFFF</textcolor>
             <label>[UPPERCASE]$ADDON[script.plexmod 32476][/UPPERCASE]</label>
         </control>
-
-        <!-- Filter Button -->
-        <control type="button" id="301">
-            <posx>1500</posx>
-            <posy>0</posy>
-            <width>300</width>
-            <height>{{ vscale(50) }}</height>
-            <font>font12</font>
-            <align>right</align>
-            <aligny>center</aligny>
-            <textcolor>FFFFFFFF</textcolor>
-            <focusedcolor>FFE5A00D</focusedcolor>
-            <texturefocus>-</texturefocus>
-            <texturenofocus>-</texturenofocus>
-            <label>$INFO[Window.Property(filter.label)]</label>
-            <onup>201</onup>
-            <ondown>400</ondown>
-        </control>
-
-        <!-- Item Count -->
-        <control type="label">
-            <visible>Integer.IsGreater(Container(400).NumItems,0)</visible>
-            <posx>1200</posx>
-            <posy>0</posy>
-            <width>200</width>
-            <height>{{ vscale(60) }}</height>
-            <font>font10</font>
-            <align>right</align>
-            <aligny>center</aligny>
-            <textcolor>99FFFFFF</textcolor>
-            <label>$INFO[Window.Property(filmography.count)] items</label>
-        </control>
     </control>
 
     <!-- Loading Indicator -->
@@ -249,25 +173,25 @@
     <control type="group" id="500">
         <visible>String.IsEmpty(Window.Property(loading))</visible>
         <posx>0</posx>
-        <posy>{{ vscale(520) }}</posy>
+        <posy>{{ vscale(500) }}</posy>
         <width>1920</width>
-        <height>{{ vscale(500) }}</height>
+        <height>{{ vscale(540) }}</height>
 
         <control type="list" id="400">
             <posx>0</posx>
-            <posy>0</posy>
+            <posy>{{ vscale(20) }}</posy>
             <width>1920</width>
-            <height>{{ vscale(480) }}</height>
-            <onup>301</onup>
+            <height>{{ vscale(520) }}</height>
+            <onup>201</onup>
             <scrolltime>200</scrolltime>
             <orientation>horizontal</orientation>
             <preloaditems>4</preloaditems>
 
             <!-- Item Layout -->
-            <itemlayout width="288">
+            <itemlayout width="288" height="{{ vscale(500) }}">
                 <control type="group">
                     <posx>60</posx>
-                    <posy>0</posy>
+                    <posy>{{ vscale(30) }}</posy>
 
                     <!-- Poster -->
                     <control type="image">
@@ -326,10 +250,10 @@
             </itemlayout>
 
             <!-- Focused Layout -->
-            <focusedlayout width="288">
+            <focusedlayout width="288" height="{{ vscale(500) }}">
                 <control type="group">
                     <posx>60</posx>
-                    <posy>0</posy>
+                    <posy>{{ vscale(30) }}</posy>
 
                     <control type="group">
                         <animation effect="zoom" start="100" end="105" time="100" center="134,{{ vscale(201) }}" reversible="false">Focus</animation>

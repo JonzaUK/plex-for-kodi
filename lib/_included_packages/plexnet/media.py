@@ -295,6 +295,10 @@ class Role(MediaTag):
         if not self.tag:
             return self._getBasicDetails()
 
+        # Start with basic info that we'll augment
+        result = self._getBasicDetails()
+        tag_key = None
+
         try:
             # Try using the tag id first (this is typically available from Role objects)
             person_id = self.id
@@ -302,15 +306,24 @@ class Role(MediaTag):
             # If we have a tagKey (from newer API responses), that's preferred
             if hasattr(self, 'tagKey') and self.tagKey:
                 person_id = self.tagKey
+                tag_key = self.tagKey
             
             path = '/library/people/{0}'.format(person_id)
             data = self.server.query(path)
             
             if data is not None:
+                # Debug: Log the raw response structure
+                util.DEBUG_LOG('Actor API response tag: {0}, attribs: {1}'.format(data.tag, list(data.attrib.keys())))
+                for child in data:
+                    util.DEBUG_LOG('  Child element: {0}, attribs: {1}'.format(child.tag, dict(child.attrib)))
+                
                 # The response contains a Directory element with person details
                 for directory in data.findall('Directory'):
                     util.DEBUG_LOG('Found actor details for {0} via /library/people endpoint'.format(self.tag))
-                    return {
+                    # Get tagKey from response if we don't have it
+                    if not tag_key:
+                        tag_key = directory.get('tagKey', '')
+                    result = {
                         'id': directory.get('ratingKey', directory.get('id', self.id)),
                         'name': directory.get('tag', directory.get('title', self.tag)),
                         'thumb': directory.get('thumb', str(self.thumb) if self.thumb else ''),
@@ -320,26 +333,68 @@ class Role(MediaTag):
                         'birthPlace': directory.get('birthPlace', ''),
                         'role': getattr(self, 'role', ''),
                     }
+                    break
                 
-                # Also check for Metadata element (response format may vary)
-                for metadata in data.findall('Metadata'):
-                    util.DEBUG_LOG('Found actor details in Metadata for {0}'.format(self.tag))
-                    return {
-                        'id': metadata.get('ratingKey', metadata.get('id', self.id)),
-                        'name': metadata.get('tag', metadata.get('title', self.tag)),
-                        'thumb': metadata.get('thumb', str(self.thumb) if self.thumb else ''),
-                        'summary': metadata.get('summary', ''),
-                        'birthDate': metadata.get('birthDate', ''),
-                        'deathDate': metadata.get('deathDate', ''),
-                        'birthPlace': metadata.get('birthPlace', ''),
-                        'role': getattr(self, 'role', ''),
-                    }
-            
-            util.DEBUG_LOG('No person data found at /library/people/{0}'.format(person_id))
         except Exception as e:
-            util.DEBUG_LOG('Failed to fetch actor details for {0}: {1}'.format(self.tag, e))
+            util.DEBUG_LOG('Failed to fetch actor details from local PMS for {0}: {1}'.format(self.tag, e))
 
-        return self._getBasicDetails()
+        # If we have a tagKey and no biography yet, try the online metadata provider
+        if tag_key and not result.get('summary'):
+            try:
+                # Query the metadata provider for rich actor details
+                # The tagKey is the actor's GUID on plex.tv
+                from . import plexapp
+                account = plexapp.ACCOUNT
+                if account and account.authToken:
+                    import requests
+                    
+                    # Try multiple possible endpoints
+                    endpoints = [
+                        'https://discover.provider.plex.tv/library/people/{0}'.format(tag_key),
+                        'https://metadata.provider.plex.tv/library/metadata/{0}'.format(tag_key),
+                        'https://discover.provider.plex.tv/library/metadata/{0}'.format(tag_key),
+                    ]
+                    
+                    headers = {
+                        'X-Plex-Token': account.authToken,
+                        'Accept': 'application/xml'
+                    }
+                    
+                    for url in endpoints:
+                        util.DEBUG_LOG('Trying actor metadata from: {0}'.format(url))
+                        try:
+                            response = requests.get(url, headers=headers, timeout=5)
+                            
+                            if response.status_code == 200:
+                                import xml.etree.ElementTree as ET
+                                data = ET.fromstring(response.content)
+                                util.DEBUG_LOG('Metadata response from {0}: tag={1}, children={2}'.format(
+                                    url.split('/')[2], data.tag, [c.tag for c in data]))
+                                
+                                for elem in list(data.findall('Directory')) + list(data.findall('Metadata')) + list(data):
+                                    if elem.get('summary') or elem.get('birthDate'):
+                                        util.DEBUG_LOG('Found rich actor metadata!')
+                                        result['summary'] = elem.get('summary', result.get('summary', ''))
+                                        result['birthDate'] = elem.get('birthDate', result.get('birthDate', ''))
+                                        result['deathDate'] = elem.get('deathDate', result.get('deathDate', ''))
+                                        result['birthPlace'] = elem.get('birthPlace', result.get('birthPlace', ''))
+                                        if elem.get('thumb'):
+                                            result['thumb'] = elem.get('thumb')
+                                        break
+                                
+                                # If we found data, stop trying other endpoints
+                                if result.get('summary') or result.get('birthDate'):
+                                    break
+                            else:
+                                util.DEBUG_LOG('  Status {0}'.format(response.status_code))
+                        except Exception as e:
+                            util.DEBUG_LOG('  Error: {0}'.format(e))
+                            continue
+                            
+            except Exception as e:
+                util.DEBUG_LOG('Failed to fetch actor metadata from plex.tv for {0}: {1}'.format(self.tag, e))
+
+        return result
 
     def _getBasicDetails(self):
         """Return basic info from the Role object when API call fails or is unavailable."""
@@ -359,6 +414,9 @@ class Role(MediaTag):
         Get all movies/shows this actor appears in from your library.
         Uses /library/people/{personId}/media endpoint per Plex API docs.
         media_type: 'movie', 'show', or None for all
+        
+        Note: The Plex discover API does not provide an endpoint for actor filmography,
+        so only local library content is returned.
         """
         items = []
         
@@ -372,9 +430,20 @@ class Role(MediaTag):
             data = self.server.query(path)
             
             if data is not None:
+                # Debug: Log the raw response structure
+                util.DEBUG_LOG('Filmography API response tag: {0}, attribs: {1}'.format(data.tag, list(data.attrib.keys())))
+                child_count = 0
+                for child in data:
+                    child_count += 1
+                    if child_count <= 3:  # Only log first 3 to avoid spam
+                        util.DEBUG_LOG('  Filmography child: {0}, type={1}, title={2}'.format(
+                            child.tag, child.get('type', 'N/A'), child.get('title', 'N/A')))
+                util.DEBUG_LOG('  Total child elements: {0}'.format(child_count))
+                
                 from . import video  # Import here to avoid circular imports
                 
-                for elem in data.findall('Metadata'):
+                # Look for Video elements (what the API actually returns) AND Metadata elements
+                for elem in list(data.findall('Video')) + list(data.findall('Metadata')) + list(data.findall('Directory')):
                     item_type = elem.get('type', '')
                     
                     # Filter by media type if specified
