@@ -288,59 +288,54 @@ class Role(MediaTag):
     def getDetails(self):
         """
         Fetch full actor metadata including biography, birth date, photo, etc.
-        Uses the search endpoint with people type to find actor details.
+        Uses /library/people/{personId} endpoint per Plex API docs.
+        The personId can be either the PMS tag id or the tagKey (hex portion of plex guid).
         Returns a dict with actor details.
         """
         if not self.tag:
             return self._getBasicDetails()
 
         try:
-            # Search for the actor using the people search type
-            path = '/hubs/search'
-            params = {
-                'query': self.tag,
-                'searchTypes': 'people',
-                'limit': 5
-            }
-            data = self.server.query(path, params=params)
+            # Try using the tag id first (this is typically available from Role objects)
+            person_id = self.id
+            
+            # If we have a tagKey (from newer API responses), that's preferred
+            if hasattr(self, 'tagKey') and self.tagKey:
+                person_id = self.tagKey
+            
+            path = '/library/people/{0}'.format(person_id)
+            data = self.server.query(path)
             
             if data is not None:
-                # Find the Hub with type="people" or containing actor data
-                for hub in data.findall('Hub'):
-                    hub_type = hub.get('type', '')
-                    if hub_type in ('people', 'actor', 'person'):
-                        # Look for matching actor in hub results
-                        for elem in hub:
-                            elem_tag = elem.get('tag', elem.get('title', ''))
-                            # Match by name (case-insensitive)
-                            if elem_tag.lower() == self.tag.lower():
-                                util.DEBUG_LOG('Found actor details for {0} via search'.format(self.tag))
-                                return {
-                                    'id': elem.get('ratingKey', elem.get('id', self.id)),
-                                    'name': elem.get('tag', elem.get('title', self.tag)),
-                                    'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
-                                    'summary': elem.get('summary', ''),
-                                    'birthDate': elem.get('birthDate', ''),
-                                    'deathDate': elem.get('deathDate', ''),
-                                    'birthPlace': elem.get('birthPlace', ''),
-                                    'role': getattr(self, 'role', ''),
-                                }
-                        # If no exact match, use first result
-                        if len(hub) > 0:
-                            elem = hub[0]
-                            util.DEBUG_LOG('Using first search result for actor {0}'.format(self.tag))
-                            return {
-                                'id': elem.get('ratingKey', elem.get('id', self.id)),
-                                'name': elem.get('tag', elem.get('title', self.tag)),
-                                'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
-                                'summary': elem.get('summary', ''),
-                                'birthDate': elem.get('birthDate', ''),
-                                'deathDate': elem.get('deathDate', ''),
-                                'birthPlace': elem.get('birthPlace', ''),
-                                'role': getattr(self, 'role', ''),
-                            }
+                # The response contains a Directory element with person details
+                for directory in data.findall('Directory'):
+                    util.DEBUG_LOG('Found actor details for {0} via /library/people endpoint'.format(self.tag))
+                    return {
+                        'id': directory.get('ratingKey', directory.get('id', self.id)),
+                        'name': directory.get('tag', directory.get('title', self.tag)),
+                        'thumb': directory.get('thumb', str(self.thumb) if self.thumb else ''),
+                        'summary': directory.get('summary', ''),
+                        'birthDate': directory.get('birthDate', ''),
+                        'deathDate': directory.get('deathDate', ''),
+                        'birthPlace': directory.get('birthPlace', ''),
+                        'role': getattr(self, 'role', ''),
+                    }
+                
+                # Also check for Metadata element (response format may vary)
+                for metadata in data.findall('Metadata'):
+                    util.DEBUG_LOG('Found actor details in Metadata for {0}'.format(self.tag))
+                    return {
+                        'id': metadata.get('ratingKey', metadata.get('id', self.id)),
+                        'name': metadata.get('tag', metadata.get('title', self.tag)),
+                        'thumb': metadata.get('thumb', str(self.thumb) if self.thumb else ''),
+                        'summary': metadata.get('summary', ''),
+                        'birthDate': metadata.get('birthDate', ''),
+                        'deathDate': metadata.get('deathDate', ''),
+                        'birthPlace': metadata.get('birthPlace', ''),
+                        'role': getattr(self, 'role', ''),
+                    }
             
-            util.DEBUG_LOG('No people hub found in search results for {0}'.format(self.tag))
+            util.DEBUG_LOG('No person data found at /library/people/{0}'.format(person_id))
         except Exception as e:
             util.DEBUG_LOG('Failed to fetch actor details for {0}: {1}'.format(self.tag, e))
 
@@ -362,8 +357,52 @@ class Role(MediaTag):
     def getFilmography(self, media_type=None):
         """
         Get all movies/shows this actor appears in from your library.
+        Uses /library/people/{personId}/media endpoint per Plex API docs.
         media_type: 'movie', 'show', or None for all
         """
+        items = []
+        
+        try:
+            # Use the proper people media endpoint
+            person_id = self.id
+            if hasattr(self, 'tagKey') and self.tagKey:
+                person_id = self.tagKey
+            
+            path = '/library/people/{0}/media'.format(person_id)
+            data = self.server.query(path)
+            
+            if data is not None:
+                from . import video  # Import here to avoid circular imports
+                
+                for elem in data.findall('Metadata'):
+                    item_type = elem.get('type', '')
+                    
+                    # Filter by media type if specified
+                    if media_type:
+                        if media_type == 'movie' and item_type != 'movie':
+                            continue
+                        if media_type == 'show' and item_type != 'show':
+                            continue
+                    
+                    # Only include movies and shows
+                    if item_type in ('movie', 'show'):
+                        # Create appropriate media object
+                        if item_type == 'movie':
+                            item = video.Movie(elem, self.initpath, self.server)
+                        else:
+                            item = video.Show(elem, self.initpath, self.server)
+                        items.append(item)
+                
+                util.DEBUG_LOG('Found {0} filmography items for {1}'.format(len(items), self.tag))
+        except Exception as e:
+            util.DEBUG_LOG('Failed to fetch filmography for {0}: {1}'.format(self.tag, e))
+            # Fallback to search-based approach
+            items = self._getFilmographyViaSearch(media_type)
+        
+        return items
+    
+    def _getFilmographyViaSearch(self, media_type=None):
+        """Fallback filmography fetch using hub search."""
         hubs = self.server.hubs(count=50, search_query=self.tag)
         items = []
 
@@ -376,7 +415,6 @@ class Role(MediaTag):
 
             if hub.type in ('movie', 'show'):
                 for item in hub.items:
-                    # Check if this actor is actually in the item's cast
                     items.append(item)
 
         return items
