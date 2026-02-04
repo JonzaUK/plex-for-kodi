@@ -3125,3 +3125,11 @@ msgstr ""
 msgctxt "#32478"
 msgid "No items found in your library"
 msgstr ""
+
+msgctxt "#34090"
+msgid "Unknown"
+msgstr ""
+
+msgctxt "#34091"
+msgid "Choose Version"
+msgstr ""

@@ -12,6 +12,7 @@ from kodi_six import xbmcgui
 from lib import backgroundthread
 from lib import util
 from lib.util import T
+from plexnet import util as plexnetUtil
 from . import busy
 from . import dropdown
 from . import kodigui
@@ -109,7 +110,9 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         kodigui.ControlledWindow.__init__(self, *args, **kwargs)
         self.role = kwargs.get('role')
         self.actorDetails = None
-        self.filmographyItems = []
+        self.filmographyItems = []  # Unique items (one per GUID)
+        self.filmographyAllItems = []  # All raw items from API
+        self.filmographyByGuid = {}  # {guid: [item1, item2, ...]} for multi-library handling
         self.filmographyOffset = 0
         self.filmographyTotalSize = 0
         self.filmographyMore = False
@@ -225,12 +228,16 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             self.onFilmographyExtendCanceled()
             return
 
-        # Add new items to our list
-        self.filmographyItems.extend(items)
+        # Add new items to all items list
+        self.filmographyAllItems.extend(items)
+        
+        # Group new items by GUID and merge with existing
+        newUniqueItems, newByGuid = self.groupFilmographyByGuid(items, existingByGuid=self.filmographyByGuid)
+        self.filmographyItems.extend(newUniqueItems)
 
-        # Create list items for the new items
+        # Create list items for the new unique items only
         newListItems = []
-        for item in items:
+        for item in newUniqueItems:
             mli = self.createFilmographyListItem(item)
             newListItems.append(mli)
 
@@ -292,10 +299,13 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         
         # Handle the new result format with pagination info
         items = result.get('items', [])
-        self.filmographyItems = items
+        self.filmographyAllItems = items
         self.filmographyOffset = result.get('offset', 0)
         self.filmographyTotalSize = result.get('totalSize', len(items))
         self.filmographyMore = result.get('more', False)
+        
+        # Group items by GUID to handle multi-library duplicates
+        self.filmographyItems, self.filmographyByGuid = self.groupFilmographyByGuid(items)
         
         self.fillFilmography()
 
@@ -353,7 +363,20 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         if not mli or not mli.dataSource:
             return
 
-        self.processCommand(opener.open(mli.dataSource))
+        item = mli.dataSource
+        guid = self.getItemGuid(item)
+        
+        # Check if multiple versions exist
+        versions = self.filmographyByGuid.get(guid, [item]) if guid else [item]
+        
+        if len(versions) > 1:
+            # Show dropdown to choose version
+            selectedItem = self.showVersionPicker(versions, item.type if hasattr(item, 'type') else 'movie')
+            if selectedItem:
+                self.processCommand(opener.open(selectedItem))
+        else:
+            # Single version, open directly
+            self.processCommand(opener.open(item))
 
     def searchButtonClicked(self):
         self.processCommand(search.dialog(self))
@@ -407,3 +430,123 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             return age
         except (ValueError, IndexError):
             return None
+
+    def getItemGuid(self, item):
+        """Get the GUID from a filmography item"""
+        if hasattr(item, 'guid') and item.guid:
+            return str(item.guid)
+        return None
+
+    def groupFilmographyByGuid(self, items, existingByGuid=None):
+        """
+        Group filmography items by GUID to handle multi-library duplicates.
+        Returns (uniqueItems, byGuidDict) where uniqueItems has one item per GUID
+        (the highest quality version) and byGuidDict maps GUID to all versions.
+        """
+        byGuid = existingByGuid if existingByGuid is not None else {}
+        uniqueItems = []
+        seenGuids = set(byGuid.keys()) if existingByGuid else set()
+        
+        for item in items:
+            guid = self.getItemGuid(item)
+            
+            if guid:
+                if guid not in byGuid:
+                    byGuid[guid] = []
+                byGuid[guid].append(item)
+                
+                # Only add to unique items if we haven't seen this GUID before
+                if guid not in seenGuids:
+                    seenGuids.add(guid)
+                    uniqueItems.append(item)
+            else:
+                # No GUID, add as unique item
+                uniqueItems.append(item)
+        
+        # Sort versions within each GUID by bitrate (highest first) for movies
+        for guid, versions in byGuid.items():
+            if len(versions) > 1:
+                versions.sort(key=lambda v: self.getItemBitrate(v), reverse=True)
+                # Replace the unique item with the highest quality version
+                for i, uitem in enumerate(uniqueItems):
+                    if self.getItemGuid(uitem) == guid:
+                        uniqueItems[i] = versions[0]
+                        break
+        
+        return uniqueItems, byGuid
+
+    def getItemBitrate(self, item):
+        """Get the bitrate from an item's media info"""
+        try:
+            if hasattr(item, 'media') and item.media:
+                for media in item.media:
+                    if hasattr(media, 'bitrate'):
+                        return int(media.bitrate) if media.bitrate else 0
+        except (ValueError, TypeError, AttributeError):
+            pass
+        return 0
+
+    def getItemResolution(self, item):
+        """Get the video resolution from an item's media info"""
+        try:
+            if hasattr(item, 'media') and item.media:
+                for media in item.media:
+                    if hasattr(media, 'videoResolution') and media.videoResolution:
+                        return str(media.videoResolution)
+        except (AttributeError, TypeError):
+            pass
+        return ''
+
+    def getItemLibraryTitle(self, item):
+        """Get the library section title for an item"""
+        if hasattr(item, 'getLibrarySectionTitle'):
+            return item.getLibrarySectionTitle()
+        elif hasattr(item, 'librarySectionTitle'):
+            return str(item.librarySectionTitle)
+        return ''
+
+    def formatVersionLabel(self, item, media_type='movie'):
+        """Format a version label like watchlist: 'Library, Resolution (Bitrate)'"""
+        library = self.getItemLibraryTitle(item) or T(34090, 'Unknown')
+        
+        if media_type == 'movie':
+            resolution = self.getItemResolution(item)
+            bitrate = self.getItemBitrate(item)
+            
+            if resolution:
+                res_str = '{}p'.format(resolution) if 'k' not in str(resolution).lower() else resolution.upper()
+            else:
+                res_str = T(34090, 'Unknown')
+            
+            if bitrate:
+                bitrate_str = plexnetUtil.bitrateToString(bitrate * 1000)
+                return '{}, {} ({})'.format(library, res_str, bitrate_str)
+            else:
+                return '{}, {}'.format(library, res_str)
+        else:
+            # For shows, just show library name
+            return library
+
+    def showVersionPicker(self, versions, media_type='movie'):
+        """Show a dropdown to pick which version to open"""
+        options = []
+        
+        for idx, item in enumerate(versions):
+            label = self.formatVersionLabel(item, media_type)
+            options.append({
+                'key': idx,
+                'display': label
+            })
+        
+        choice = dropdown.showDropdown(
+            options=options,
+            pos=(660, 441),
+            close_direction='none',
+            set_dropdown_prop=False,
+            header=T(34091, 'Choose Version'),
+            align_items='left'
+        )
+        
+        if choice is not None:
+            return versions[choice['key']]
+        return None
