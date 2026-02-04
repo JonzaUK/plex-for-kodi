@@ -146,7 +146,14 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
 
     def onActorDetails(self, details):
         if not details:
+            util.DEBUG_LOG('ActorWindow: No details returned for actor')
             return
+
+        util.DEBUG_LOG('ActorWindow: Got actor details - name={}, summary_len={}, birthDate={}'.format(
+            details.get('name', ''),
+            len(details.get('summary', '')),
+            details.get('birthDate', '')
+        ))
 
         self.actorDetails = details
         self.setProperty('actor.name', details.get('name', ''))

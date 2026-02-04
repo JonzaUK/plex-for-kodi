@@ -291,30 +291,31 @@ class Role(MediaTag):
         Returns a dict with actor details or None if not available.
         """
         if not self.id:
-            return None
+            return self._getBasicDetails()
 
         try:
             path = '/library/metadata/{0}'.format(self.id)
             data = self.server.query(path)
             if data is not None and len(data) > 0:
                 elem = data[0]
-                # Handle both Directory (person) and Video elements
-                tag_name = elem.tag
-                if tag_name in ('Directory', 'Person'):
-                    return {
-                        'id': elem.get('ratingKey', self.id),
-                        'name': elem.get('title', self.tag),
-                        'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
-                        'summary': elem.get('summary', ''),
-                        'birthDate': elem.get('birthDate', ''),
-                        'deathDate': elem.get('deathDate', ''),
-                        'birthPlace': elem.get('birthPlace', ''),
-                        'role': getattr(self, 'role', ''),
-                    }
+                # Parse any element type - Plex may return Directory, Person, or other types
+                return {
+                    'id': elem.get('ratingKey', self.id),
+                    'name': elem.get('title', elem.get('tag', self.tag)),
+                    'thumb': elem.get('thumb', str(self.thumb) if self.thumb else ''),
+                    'summary': elem.get('summary', ''),
+                    'birthDate': elem.get('birthDate', ''),
+                    'deathDate': elem.get('deathDate', ''),
+                    'birthPlace': elem.get('birthPlace', ''),
+                    'role': getattr(self, 'role', ''),
+                }
         except Exception as e:
             util.DEBUG_LOG('Failed to fetch actor details for {0}: {1}'.format(self.tag, e))
 
-        # Return basic info if API call fails
+        return self._getBasicDetails()
+
+    def _getBasicDetails(self):
+        """Return basic info from the Role object when API call fails or is unavailable."""
         return {
             'id': self.id,
             'name': self.tag,

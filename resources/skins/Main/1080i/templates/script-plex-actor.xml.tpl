@@ -130,7 +130,7 @@
                 <align>left</align>
                 <aligny>center</aligny>
                 <textcolor>99FFFFFF</textcolor>
-                <label>$LOCALIZE[32473]</label> <!-- "Actor" -->
+                <label>$ADDON[script.plexmod 32473]</label>
             </control>
 
             <!-- Birth Date and Age -->
@@ -140,6 +140,7 @@
                 <posy>{{ vscale(90) }}</posy>
 
                 <control type="label">
+                    <visible>!String.IsEmpty(Window.Property(actor.age))</visible>
                     <posx>0</posx>
                     <posy>0</posy>
                     <width>1400</width>
@@ -148,7 +149,19 @@
                     <align>left</align>
                     <aligny>center</aligny>
                     <textcolor>AAFFFFFF</textcolor>
-                    <label>$LOCALIZE[32474] $INFO[Window.Property(actor.birthDate)] ($INFO[Window.Property(actor.age)] $LOCALIZE[32475])</label>
+                    <label>Born $INFO[Window.Property(actor.birthDate)] ($INFO[Window.Property(actor.age)] years)</label>
+                </control>
+                <control type="label">
+                    <visible>String.IsEmpty(Window.Property(actor.age))</visible>
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>1400</width>
+                    <height>{{ vscale(30) }}</height>
+                    <font>font12</font>
+                    <align>left</align>
+                    <aligny>center</aligny>
+                    <textcolor>AAFFFFFF</textcolor>
+                    <label>Born $INFO[Window.Property(actor.birthDate)]</label>
                 </control>
             </control>
 
@@ -182,7 +195,7 @@
             <align>left</align>
             <aligny>center</aligny>
             <textcolor>FFFFFFFF</textcolor>
-            <label>[UPPERCASE]$LOCALIZE[32476][/UPPERCASE]</label> <!-- "Movies &amp; Shows in Media Libraries" -->
+            <label>[UPPERCASE]$ADDON[script.plexmod 32476][/UPPERCASE]</label>
         </control>
 
         <!-- Filter Button -->
@@ -205,7 +218,7 @@
 
         <!-- Item Count -->
         <control type="label">
-            <visible>!String.IsEmpty(Window.Property(filmography.count))</visible>
+            <visible>Integer.IsGreater(Container(400).NumItems,0)</visible>
             <posx>1200</posx>
             <posy>0</posy>
             <width>200</width>
@@ -214,7 +227,7 @@
             <align>right</align>
             <aligny>center</aligny>
             <textcolor>99FFFFFF</textcolor>
-            <label>$INFO[Window.Property(filmography.count)] $LOCALIZE[32477]</label> <!-- "items" -->
+            <label>$INFO[Window.Property(filmography.count)] items</label>
         </control>
     </control>
 
@@ -418,7 +431,7 @@
             <align>center</align>
             <aligny>center</aligny>
             <textcolor>99FFFFFF</textcolor>
-            <label>$LOCALIZE[32478]</label> <!-- "No items found in your library" -->
+            <label>$ADDON[script.plexmod 32478]</label>
         </control>
     </control>
 </control>
