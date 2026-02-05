@@ -564,11 +564,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         'season': 'poster',
     }
 
-    # Native Home hub identifiers that SHOULD be shown by default (whitelist approach)
-    # Settings version for migration - increment when defaults change
-    # Version 1: Reset Home config so upgrading users get native Plex Home hubs
-    HUB_SETTINGS_VERSION = 1
-
     THUMB_POSTER_DIM = util.scaleResolution(244, 361)
     THUMB_AR16X9_DIM = util.scaleResolution(532, 299)
     THUMB_SQUARE_DIM = util.scaleResolution(244, 244)
@@ -846,24 +841,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         setting_key = 'hub.settings.{}.{}'.format(plexapp.SERVERMANAGER.selectedServer.uuid[-8:], plexapp.ACCOUNT.ID)
         data = util.getSetting(setting_key, '')
         self.hubSettings = {}
-        needs_save = False
         try:
             loaded = json.loads(data)
-
-            # Check for migration - if version is missing or old, reset Home section
-            # This ensures users upgrading get the new default hub settings
-            stored_version = loaded.get('_version', 0)
-            if stored_version < self.HUB_SETTINGS_VERSION:
-                # Reset Home section config so new defaults apply
-                if '__home__' in loaded:
-                    del loaded['__home__']
-                loaded['_version'] = self.HUB_SETTINGS_VERSION
-                needs_save = True
 
             # Convert "__home__" key back to None (JSON doesn't support None keys)
             for key, value in loaded.items():
                 if key == '_version':
-                    continue  # Skip version key, not a section config
+                    continue  # Skip legacy version key
                 if key == '__home__':
                     self.hubSettings[None] = value
                 else:
@@ -873,15 +857,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         except:
             util.ERROR()
 
-        # Save migrated settings if needed (deferred to avoid issues during init)
-        if needs_save:
-            self._hubSettingsNeedsMigrationSave = True
-
     def saveHubSettings(self):
         setting_key = 'hub.settings.{}.{}'.format(plexapp.SERVERMANAGER.selectedServer.uuid[-8:],
                                                   plexapp.ACCOUNT.ID)
-        # Convert None key to "__home__" for JSON storage and include version
-        to_save = {'_version': self.HUB_SETTINGS_VERSION}
+        # Convert None key to "__home__" for JSON storage
+        to_save = {}
         for key, value in self.hubSettings.items():
             if key is None:
                 to_save['__home__'] = value
@@ -2789,10 +2769,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if plexapp.SERVERMANAGER.selectedServer:
                 self.loadLibrarySettings()
                 self.loadHubSettings()
-                # Save migrated settings if needed (deferred from loadHubSettings)
-                if getattr(self, '_hubSettingsNeedsMigrationSave', False):
-                    self.saveHubSettings()
-                    self._hubSettingsNeedsMigrationSave = False
                 # Clear hub catalog on server change - will be discovered lazily when needed
                 self.availableHubs = {}
             if not plexapp.SERVERMANAGER.selectedServer:
