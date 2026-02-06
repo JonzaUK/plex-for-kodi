@@ -2982,3 +2982,7 @@ msgstr ""
 msgctxt "#34079"
 msgid "How long should we wait when executing Seek back on start, after having seeked forwards temporarily, before seeking back? Setting this higher could resolve decoder initialisation issues. Default: 500ms"
 msgstr ""
+
+msgctxt "#34089"
+msgid "History"
+msgstr ""
