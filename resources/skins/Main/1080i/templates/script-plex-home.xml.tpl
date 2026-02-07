@@ -12,7 +12,7 @@
     <!-- Subsequent hubs use consistent slide distance -->
     {% for anim in core.animation_indexes %}
     <animation type="Conditional" condition="Integer.IsGreater(Window.Property(hub.focus),{{ anim.index }}) + Control.IsVisible({{ anim.prev_group_id }})" reversible="true">
-        <effect type="slide" end="0,{{ vscale(-540) }}" time="200" tween="sine" easing="inout"/>
+        <effect type="slide" end="0,{{ vscale(-555) }}" time="200" tween="sine" easing="inout"/>
     </animation>
     {% endfor %}
 
@@ -20,7 +20,7 @@
     <posx>0</posx>
     <posy>{{ vscale(96) }}</posy>
     <width>2130</width>
-    <height>{{ vscale(5540) }}</height>
+    <height>{{ vscale(core.grouplist_height) }}</height>
     <itemgap>20</itemgap>
     <orientation>vertical</orientation>
     <usecontrolcoords>true</usecontrolcoords>
