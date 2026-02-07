@@ -222,6 +222,7 @@ class SearchDialog(kodigui.BaseDialog, windowutils.UtilMixin):
     def onAction(self, action):
         try:
             if action in (xbmcgui.ACTION_NAV_BACK, xbmcgui.ACTION_PREVIOUS_MENU):
+                self.addToHistory(self.edit.getText())
                 self.isActive = False
         except:
             util.ERROR()
@@ -250,6 +251,7 @@ class SearchDialog(kodigui.BaseDialog, windowutils.UtilMixin):
 
     def updateFromEdit(self, actionID, oldVal, newVal):
         if actionID == xbmcgui.ACTION_PREVIOUS_MENU:
+            self.addToHistory(self.edit.getText())
             self.isActive = False
             self.doClose()
             return
@@ -277,8 +279,6 @@ class SearchDialog(kodigui.BaseDialog, windowutils.UtilMixin):
             with self.propertyContext('searching'):
                 hubs = plexapp.SERVERMANAGER.selectedServer.hubs(count=10, search_query=query, section=self.sectionID)
                 self.showHubs(hubs)
-                # Save to history after successful search
-                self.addToHistory(query)
         else:
             # Show search history when search box is empty
             self.showSearchHistory()
@@ -397,6 +397,7 @@ class SearchDialog(kodigui.BaseDialog, windowutils.UtilMixin):
             util.DEBUG_LOG('Search: Playlist does not exist - probably wrong user')
             return
 
+        self.addToHistory(self.edit.getText())
         self.doClose()
         try:
             command = opener.open(hubItem)
