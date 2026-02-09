@@ -348,6 +348,12 @@ class Video(media.MediaItem, AudioCodecMixin):
         self.clearCache()
         self.reload(**kwargs)
 
+    def rate(self, rating, **kwargs):
+        path = '/:/rate?key=%s&identifier=com.plexapp.plugins.library&rating=%s' % (self.ratingKey, rating)
+        self.server.query(path, method=self.server.session.put)
+        self.clearCache()
+        self.reload(**kwargs)
+
     def removeFromContinueWatching(self, **kwargs):
         path = '/actions/removeFromContinueWatching?ratingKey={}'.format(self.ratingKey)
         self.server.query(path, method=self.server.session.put)

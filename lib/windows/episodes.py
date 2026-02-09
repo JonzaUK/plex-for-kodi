@@ -1172,6 +1172,7 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, SeasonsMix
                 options.append({'key': 'mark_watched', 'display': T(32319, 'Mark Played')})
             if mli.dataSource.isWatched or inProgress:
                 options.append({'key': 'mark_unwatched', 'display': T(32318, 'Mark Unplayed')})
+            options.append({'key': 'rate', 'display': T(35004, 'Rate')})
 
             # if True:
             #     options.append({'key': 'add_to_playlist', 'display': '[COLOR FF808080]Add To Playlist[/COLOR]'})
@@ -1232,6 +1233,10 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, SeasonsMix
             self.toggleWatched(mli, state=True)
         elif choice['key'] == 'mark_unwatched':
             self.toggleWatched(mli, state=False)
+        elif choice['key'] == 'rate':
+            if self.showRatingDialog(mli.dataSource):
+                self.updateItems(mli)
+                self.populateRatings(mli.dataSource, mli)
         elif choice['key'] == 'mark_season_watched':
             self.toggleWatched(item=self.season, state=True)
         elif choice['key'] == 'mark_season_unwatched':

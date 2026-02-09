@@ -1,8 +1,34 @@
 # coding=utf-8
 from lib import util
+from lib.windows import dropdown
+
+T = util.T
 
 
 class RatingsMixin(object):
+    def showRatingDialog(self, video, pos=None):
+        current = int(round(video.userRating.asFloat())) if video.userRating else 0
+        options = []
+        for i in range(1, 11):
+            ind = 'script.plex/home/device/check.png' if i == current else ''
+            options.append({'key': i, 'display': str(i), 'indicator': ind})
+        if current:
+            options.append(dropdown.SEPARATOR)
+            options.append({'key': 'clear', 'display': T(35003, 'Clear Rating')})
+
+        select_index = current - 1 if current else None
+        choice = dropdown.showDropdown(
+            options, pos, header=T(35004, 'Rate'), with_indicator=True, select_index=select_index
+        )
+        if not choice:
+            return False
+
+        if choice['key'] == 'clear':
+            video.rate(-1)
+        else:
+            video.rate(choice['key'])
+        return True
+
     def populateRatings(self, video, ref, hide_ratings=False):
         def sanitize(src):
             return src.replace("themoviedb", "tmdb").replace('://', '/')
