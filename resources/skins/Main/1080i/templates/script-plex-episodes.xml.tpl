@@ -62,6 +62,7 @@
                                     visible="String.IsEmpty(Window.Property(current_item.loaded))"
                 %}
                 {% include template with name="settings" & id=305 %}
+                {% include template with name="rate" & id=310 %}
                 {% include template with name="more" & id=303 %}
                 {% include template with name="shuffle" & id=302 %}
             {% endwith %}
@@ -92,6 +93,7 @@
                 %}
                 {% include template with name="media" & id=1307 %}
                 {% include template with name="settings" & id=1305 %}
+                {% include template with name="rate" & id=1310 %}
                 {% include template with name="more" & id=1303 %}
                 {% include template with name="shuffle" & id=1302 %}
             {% endwith %}

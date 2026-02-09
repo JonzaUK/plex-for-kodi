@@ -71,6 +71,7 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, RatingsMixi
     SETTINGS_BUTTON_ID = 305
     OPTIONS_BUTTON_ID = 306
     MEDIA_BUTTON_ID = 307
+    RATE_BUTTON_ID = 310
 
     POSSIBLE_PLAY_BUTTON_IDS = [302, 2302, 2303, 2304, 2305]
 
@@ -256,6 +257,9 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, RatingsMixi
             self.settingsButtonClicked()
         elif controlID == self.TRAILER_BUTTON_ID:
             self.openItem(item=self.trailer)
+        elif controlID == self.RATE_BUTTON_ID:
+            if self.showRatingDialog(self.video):
+                self.refreshInfo()
         elif controlID == self.OPTIONS_BUTTON_ID:
             self.optionsButtonClicked()
         elif controlID == self.MEDIA_BUTTON_ID:
@@ -319,7 +323,6 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, RatingsMixi
             options.append({'key': 'mark_watched', 'display': T(32319, 'Mark Played')})
         if self.video.isWatched or inProgress:
             options.append({'key': 'mark_unwatched', 'display': T(32318, 'Mark Unplayed')})
-        options.append({'key': 'rate', 'display': T(35004, 'Rate')})
 
         options.append(dropdown.SEPARATOR)
 
@@ -359,9 +362,6 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, RatingsMixi
             self.toggleWatched(self.video, state=True, **VIDEO_RELOAD_KW)
         elif choice['key'] == 'mark_unwatched':
             self.toggleWatched(self.video, state=False, **VIDEO_RELOAD_KW)
-        elif choice['key'] == 'rate':
-            if self.showRatingDialog(self.video):
-                self.refreshInfo()
         elif choice['key'] == 'to_season':
             self.processCommand(opener.open(self.video.parentRatingKey))
         elif choice['key'] == 'to_show':

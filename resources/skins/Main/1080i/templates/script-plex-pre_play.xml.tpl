@@ -43,6 +43,7 @@
                 {% include "includes/wl_add_remove_buttons.xml.tpl" %}
                 {% include template with name="media" & id=307 & visible="!String.IsEmpty(Window.Property(media.multiple))" %}
                 {% include template with name="settings" & id=305 & visible="String.IsEmpty(Window.Property(disable_playback))" %}
+                {% include template with name="rate" & id=310 & visible="String.IsEmpty(Window.Property(disable_playback))" %}
                 {% include template with name="more" & id=306 & visible="String.IsEmpty(Window.Property(disable_playback))" %}
             {% endwith %}
 
