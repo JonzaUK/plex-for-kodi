@@ -646,6 +646,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         )
         self.hubFocusIndexes = tuple(range(hub_count))
 
+        self.showHero = util.getSetting('show_hero', True)
+        self.setProperty('show.hero', '1' if self.showHero else '')
+
         self.bottomItem = 0
         if self.serverRefresh():
             self.setFocusId(self.SECTION_LIST_ID)
@@ -2111,6 +2114,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.on('account:response', self.displayServerAndUser)
         plexapp.util.APP.on('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.on('change:hubs_bifurcation_lines', self.updateProperties)
+        plexapp.util.APP.on('change:show_hero', self.onShowHeroChanged)
         plexapp.util.APP.on('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.on('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.on('change:path_mapping_indicators', self.setDirty)
@@ -2143,6 +2147,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.off('account:response', self.displayServerAndUser)
         plexapp.util.APP.off('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.off('change:hubs_bifurcation_lines', self.updateProperties)
+        plexapp.util.APP.off('change:show_hero', self.onShowHeroChanged)
         plexapp.util.APP.off('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.off('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.off('change:path_mapping_indicators', self.setDirty)
@@ -2613,6 +2618,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def showBusy(self, on=True):
         self.setProperty('busy', on and '1' or '')
+
+    def onShowHeroChanged(self, *args, **kwargs):
+        self.showHero = kwargs.get('value', True)
+        self.setProperty('show.hero', '1' if self.showHero else '')
 
     def setDirty(self, *args, **kwargs):
         self._reloadOnReinit = True
@@ -3369,7 +3378,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.updateBackgroundFrom(mli.dataSource)
 
         if is_valid_mli:
-            self.updateHeroFromItem(mli)
+            if self.showHero:
+                self.updateHeroFromItem(mli)
             self.updateHeroArt(mli.dataSource)
 
         if not mli or not mli.getProperty('is.end') or mli.getProperty('is.updating') == '1':
@@ -4044,7 +4054,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             for i, control in enumerate(self.hubControls):
                 if len(control) > 0 and control[0].dataSource:
                     mli = control[0]
-                    self.updateHeroFromItem(mli)
+                    if self.showHero:
+                        self.updateHeroFromItem(mli)
                     self.updateHeroArt(mli.dataSource)
                     if util.addonSettings.dynamicBackgrounds:
                         self.updateBackgroundFrom(mli.dataSource)

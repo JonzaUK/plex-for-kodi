@@ -35,6 +35,7 @@ TEMPLATE_CONTEXTS = {
         "needs_scaling": False,
         "hub_count": 8,  # Default number of hub rows on home screen
         "grouplist_height": 535,  # Viewport: matches hub row height for clean scrolling
+        "grouplist_height_expanded": 535 + 360,  # Height when hero is hidden (reclaims ~360px)
         "hubs": _generate_hub_defaults(8),
         "animation_indexes": _generate_animation_defaults(8),
     },

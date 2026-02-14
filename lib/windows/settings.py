@@ -709,6 +709,12 @@ class Settings(object):
                 ).description(
                     T(34088, 'Number of hub rows displayed on the home screen. More rows require more memory.')
                 ),
+                BoolSetting(
+                    'show_hero', T(34089, 'Show Hero Info on Home'), True
+                ).description(
+                    T(34090, 'Display hero spotlight with title, metadata, summary, and art at the top of the home screen. '
+                             'Disabling this gives more space for hub rows.')
+                ),
                 BoolUserSetting(
                     'use_watchlist', T(34007, 'Use Watchlist'), True
                 ).description(

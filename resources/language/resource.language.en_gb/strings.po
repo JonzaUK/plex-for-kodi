@@ -3018,3 +3018,11 @@ msgstr ""
 msgctxt "#34088"
 msgid "Number of hub rows displayed on the home screen. More rows require more memory."
 msgstr ""
+
+msgctxt "#34089"
+msgid "Show Hero Info on Home"
+msgstr ""
+
+msgctxt "#34090"
+msgid "Display hero spotlight with title, metadata, summary, and art at the top of the home screen. Disabling this gives more space for hub rows."
+msgstr ""

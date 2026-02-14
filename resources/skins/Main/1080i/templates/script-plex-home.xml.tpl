@@ -26,7 +26,7 @@
 {% block content %}
 <!-- Hero section - FIXED POSITION (outside GroupList) -->
 <control type="group" id="150">
-    <visible>!String.IsEmpty(Window.Property(hero.title))</visible>
+    <visible>!String.IsEmpty(Window.Property(show.hero)) + !String.IsEmpty(Window.Property(hero.title))</visible>
     <animation effect="fade" start="0" end="100" time="200" tween="quadratic" easing="out">Visible</animation>
     <animation effect="fade" start="100" end="0" time="200" tween="quadratic" easing="in">Hidden</animation>
     <posx>0</posx>
@@ -102,12 +102,14 @@
 <control type="grouplist" id="50">
     <!-- No slide animations - grouplist internal scroll handles all row navigation -->
     <!-- Hero zone stays permanently anchored above -->
+    <!-- When hero is hidden, slide up to reclaim space -->
+    <animation effect="slide" end="0,{{ vscale(-360) }}" time="0" condition="String.IsEmpty(Window.Property(show.hero))">Conditional</animation>
 
     <defaultcontrol>400</defaultcontrol>
     <posx>0</posx>
     <posy>{{ vscale(490) }}</posy>
     <width>2130</width>
-    <height>{{ vscale(core.grouplist_height) }}</height>
+    <height>{{ vscale(core.grouplist_height_expanded) }}</height>
     <itemgap>20</itemgap>
     <orientation>vertical</orientation>
     <usecontrolcoords>true</usecontrolcoords>
