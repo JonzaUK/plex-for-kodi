@@ -34,6 +34,7 @@ TEMPLATE_CONTEXTS = {
         "resolution": (1920, 1080),
         "needs_scaling": False,
         "hub_count": 8,  # Default number of hub rows on home screen
+        "grouplist_height": 535,  # Viewport: matches hub row height for clean scrolling
         "hubs": _generate_hub_defaults(8),
         "animation_indexes": _generate_animation_defaults(8),
     },

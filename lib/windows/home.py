@@ -634,7 +634,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                            "re-set on the last BGM encounter".format(lastGoodVlm))
             xbmc.executebuiltin("SetVolume({})".format(lastGoodVlm))
 
-        self.sectionList = kodigui.ManagedControlList(self, self.SECTION_LIST_ID, 7)
+        self.sectionList = kodigui.ManagedControlList(self, self.SECTION_LIST_ID, 6)
         self.serverList = kodigui.ManagedControlList(self, self.SERVER_LIST_ID, 10)
         self.userList = kodigui.ManagedControlList(self, self.USER_LIST_ID, 5)
 
@@ -2381,10 +2381,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             elif controlID == self.USER_BUTTON_ID and action == xbmcgui.ACTION_MOVE_LEFT:
                 self.setFocusId(self.SERVER_BUTTON_ID)
             elif controlID == self.SEARCH_BUTTON_ID and action == xbmcgui.ACTION_MOVE_RIGHT:
-                if xbmc.getCondVisibility('Player.HasMedia + Control.IsVisible({0})'.format(self.PLAYER_STATUS_BUTTON_ID)):
-                    self.setFocusId(self.PLAYER_STATUS_BUTTON_ID)
-                else:
-                    self.setFocusId(self.SERVER_BUTTON_ID)
+                self.setFocusId(self.SECTION_LIST_ID)
             elif controlID == self.PLAYER_STATUS_BUTTON_ID and action == xbmcgui.ACTION_MOVE_RIGHT:
                 self.setFocusId(self.SERVER_BUTTON_ID)
             elif 399 < controlID < 500:
@@ -2523,10 +2520,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self._shuttingDown):
             self.checkSectionItem()
 
-        if xbmc.getCondVisibility('ControlGroup(50).HasFocus(0) + ControlGroup(100).HasFocus(0)'):
-            util.setGlobalBoolProperty('off.sections', '')
-        elif controlID != 250 and xbmc.getCondVisibility('ControlGroup(50).HasFocus(0) + !ControlGroup(100).HasFocus(0)'):
-            util.setGlobalBoolProperty('off.sections', '1')
+        # New Experience: nav bar stays visible always
+        util.setGlobalBoolProperty('off.sections', '')
 
     def goHome(self, **kwargs):
         self.setProperty('hub.focus', '')
@@ -3373,6 +3368,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if util.addonSettings.dynamicBackgrounds and is_valid_mli:
             self.updateBackgroundFrom(mli.dataSource)
 
+        if is_valid_mli:
+            self.updateHeroFromItem(mli)
+            self.updateHeroArt(mli.dataSource)
+
         if not mli or not mli.getProperty('is.end') or mli.getProperty('is.updating') == '1':
             # round robining
             if mli and util.getSetting("hubs_round_robin"):
@@ -3418,6 +3417,118 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                                      canceledCallback=lambda hub: mli.setBoolProperty('is.updating', False))
         self.tasks.append(task)
         backgroundthread.BGThreader.addTask(task)
+
+    def updateHeroFromItem(self, mli):
+        """Update the hero/spotlight section with details from the focused hub item."""
+        obj = mli.dataSource if mli else None
+        if not obj:
+            self.clearHeroProperties()
+            return
+
+        obj_type = obj.type if hasattr(obj, 'type') else ''
+
+        # Title and subtitle
+        if obj_type == 'episode':
+            self.setProperty('hero.title', obj.grandparentTitle or obj.title or '')
+            self.setProperty('hero.subtitle', obj.title or '')
+            meta_parts = []
+            if obj.get('parentIndex') and obj.get('index'):
+                meta_parts.append('S{0} E{1}'.format(obj.parentIndex, obj.index))
+            if obj.get('originallyAvailableAt'):
+                try:
+                    meta_parts.append(obj.originallyAvailableAt.asDatetime('%b %d, %Y'))
+                except Exception:
+                    pass
+            if obj.get('duration'):
+                meta_parts.append(util.durationToText(obj.duration.asInt()))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        elif obj_type == 'movie':
+            self.setProperty('hero.title', obj.title or '')
+            self.setProperty('hero.subtitle', obj.get('tagline') or '')
+            meta_parts = []
+            if obj.get('year'):
+                meta_parts.append(str(obj.year))
+            if obj.get('duration'):
+                meta_parts.append(util.durationToText(obj.duration.asInt()))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        elif obj_type == 'show':
+            self.setProperty('hero.title', obj.title or '')
+            self.setProperty('hero.subtitle', obj.get('tagline') or '')
+            meta_parts = []
+            if obj.get('year'):
+                meta_parts.append(str(obj.year))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            if obj.get('leafCount'):
+                meta_parts.append('{0} episodes'.format(obj.leafCount))
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        elif obj_type in ('artist', 'album', 'track'):
+            self.setProperty('hero.title', obj.title or '')
+            subtitle = ''
+            if obj_type == 'album' and obj.get('parentTitle'):
+                subtitle = obj.parentTitle
+            elif obj_type == 'track' and obj.get('grandparentTitle'):
+                subtitle = obj.grandparentTitle
+            self.setProperty('hero.subtitle', subtitle)
+            self.setProperty('hero.metadata', '')
+        elif obj_type == 'season':
+            self.setProperty('hero.title', obj.get('parentTitle') or obj.title or '')
+            self.setProperty('hero.subtitle', obj.title or '')
+            meta_parts = []
+            if obj.get('leafCount'):
+                meta_parts.append('{0} episodes'.format(obj.leafCount))
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        else:
+            self.setProperty('hero.title', obj.get('title') or '')
+            self.setProperty('hero.subtitle', '')
+            self.setProperty('hero.metadata', '')
+
+        # Description
+        summary = obj.get('summary') or ''
+        if len(summary) > 800:
+            summary = summary[:797] + '...'
+        self.setProperty('hero.description', summary)
+
+        # Cast (for movies/episodes)
+        cast = ''
+        try:
+            roles = obj.roles()
+            if roles:
+                cast = u', '.join([r.tag for r in roles[:5]])
+        except Exception:
+            pass
+        self.setProperty('hero.cast', cast)
+
+        # Type
+        self.setProperty('hero.type', obj_type)
+
+    def updateHeroArt(self, obj):
+        """Set unblurred art for right-side hero display."""
+        art = obj.get('art') or obj.get('parentArt') or obj.get('grandparentArt')
+        if art:
+            url = art.asTranscodedImageURL(1920, 1080, blur=0, opacity=100)
+            self.setProperty('hero.art', url)
+        else:
+            self.setProperty('hero.art', '')
+
+    def updateActiveSectionMarker(self, active_section):
+        """Update the is.active property on section list items to highlight the current section."""
+        for i in range(self.sectionList.size()):
+            mli = self.sectionList[i]
+            if mli and mli.dataSource == active_section:
+                mli.setProperty('is.active', '1')
+            elif mli:
+                mli.setProperty('is.active', '')
+
+    def clearHeroProperties(self):
+        """Clear all hero section properties."""
+        for prop in ('hero.title', 'hero.subtitle', 'hero.metadata',
+                     'hero.description', 'hero.cast', 'hero.type', 'hero.art'):
+            self.setProperty(prop, '')
 
     def displayServerAndUser(self, **kwargs):
         title = plexapp.ACCOUNT.title or plexapp.ACCOUNT.username or ' '
@@ -3498,11 +3609,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self._homeNeedsRefresh = False
 
             self.setProperty('hub.focus', '')
+            self.clearHeroProperties()
             if util.addonSettings.dynamicBackgrounds:
                 self.backgroundSet = False
 
             util.DEBUG_LOG('Section changed ({0}): {1}', section.key, repr(section.title))
             self.lastSection = section
+            self.updateActiveSectionMarker(section)
             self.showHubs(section)
 
         # timing issue
@@ -3731,11 +3844,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         self.bottomItem = len(items) - 1
 
-        for x in range(len(items), 8):
-            mli = kodigui.ManagedListItem()
-            items.append(mli)
+        # Mark the initial active section
+        active_section = focus_section or home_section
+        for mli in items:
+            if mli.dataSource == active_section:
+                mli.setProperty('is.active', '1')
+                break
 
-        self.lastSection = focus_section or home_section
+        self.lastSection = active_section
         self.sectionList.reset()
         self.sectionList.addItems(items)
 
@@ -3922,6 +4038,18 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
             if focus is not None:
                 self.setFocusId(focus)
+
+        # Auto-populate hero from first hub's first item
+        if hasContent and not update:
+            for i, control in enumerate(self.hubControls):
+                if len(control) > 0 and control[0].dataSource:
+                    mli = control[0]
+                    self.updateHeroFromItem(mli)
+                    self.updateHeroArt(mli.dataSource)
+                    if util.addonSettings.dynamicBackgrounds:
+                        self.updateBackgroundFrom(mli.dataSource)
+                    break
+
         self.storeLastBG()
 
     def showHub(self, hub, items=None, is_home=False, reselect_pos=None, hub_index=None):

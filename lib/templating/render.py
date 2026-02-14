@@ -84,9 +84,9 @@ def render_templates(theme=None, templates=None, force=False):
                     'prev_group_id': 500 + i - 1,
                 })
 
-            # Pre-calculate grouplist height to fit all hubs
-            # Content: section bar (200) + hubs (hub_count × 535) + dummy (100) + gaps ((hub_count+1) × 20)
-            grouplist_height = 320 + 555 * hub_count
+            # Viewport height: matches hub row height (535) so exactly one hub
+            # is visible at a time with no bleed from adjacent rows
+            grouplist_height = 535
 
             overrides = {
                 "core": {
