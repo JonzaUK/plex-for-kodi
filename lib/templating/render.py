@@ -62,6 +62,8 @@ def render_templates(theme=None, templates=None, force=False):
             hub_count = getSetting('hub_count', 8)
 
             # Pre-calculate hub configurations for template (ibis doesn't support arithmetic)
+            HUB_ROW_HEIGHT = 535
+            HUB_ITEM_GAP = 20
             hubs = []
             for i in range(hub_count):
                 hub_id = 400 + i
@@ -72,8 +74,9 @@ def render_templates(theme=None, templates=None, force=False):
                     'spacer_id': 600 + i,
                     'is_first': i == 0,
                     'is_last': i == hub_count - 1,
-                    'prev_hub_id': 101 if i == 0 else hub_id - 1,
+                    'prev_hub_id': 9001 if i == 0 else hub_id - 1,
                     'next_hub_id': hub_id if i == hub_count - 1 else hub_id + 1,
+                    'posy': i * (HUB_ROW_HEIGHT + HUB_ITEM_GAP),
                 })
 
             # Pre-calculate animation indexes for focus animations (starts at 1)

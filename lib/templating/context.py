@@ -2,6 +2,8 @@
 
 def _generate_hub_defaults(hub_count=8):
     """Generate default hub configurations for templates."""
+    HUB_ROW_HEIGHT = 535
+    HUB_ITEM_GAP = 20
     hubs = []
     for i in range(hub_count):
         hub_id = 400 + i
@@ -12,8 +14,9 @@ def _generate_hub_defaults(hub_count=8):
             'spacer_id': 600 + i,
             'is_first': i == 0,
             'is_last': i == hub_count - 1,
-            'prev_hub_id': 101 if i == 0 else hub_id - 1,
+            'prev_hub_id': 9001 if i == 0 else hub_id - 1,
             'next_hub_id': hub_id if i == hub_count - 1 else hub_id + 1,
+            'posy': i * (HUB_ROW_HEIGHT + HUB_ITEM_GAP),
         })
     return hubs
 
