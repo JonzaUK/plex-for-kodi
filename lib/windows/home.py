@@ -649,6 +649,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         self.showHero = util.getSetting('show_hero', True)
         self.setProperty('show.hero', '1' if self.showHero else '')
+        self.useClearLogos = util.getSetting('use_clearlogos', True)
 
         self.bottomItem = 0
         if self.serverRefresh():
@@ -2116,6 +2117,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.on('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.on('change:hubs_bifurcation_lines', self.updateProperties)
         plexapp.util.APP.on('change:show_hero', self.onShowHeroChanged)
+        plexapp.util.APP.on('change:use_clearlogos', self.onUseClearLogosChanged)
         plexapp.util.APP.on('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.on('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.on('change:path_mapping_indicators', self.setDirty)
@@ -2149,6 +2151,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.off('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.off('change:hubs_bifurcation_lines', self.updateProperties)
         plexapp.util.APP.off('change:show_hero', self.onShowHeroChanged)
+        plexapp.util.APP.off('change:use_clearlogos', self.onUseClearLogosChanged)
         plexapp.util.APP.off('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.off('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.off('change:path_mapping_indicators', self.setDirty)
@@ -2623,6 +2626,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
     def onShowHeroChanged(self, *args, **kwargs):
         self.showHero = kwargs.get('value', True)
         self.setProperty('show.hero', '1' if self.showHero else '')
+
+    def onUseClearLogosChanged(self, *args, **kwargs):
+        self.useClearLogos = kwargs.get('value', True)
+        if not self.useClearLogos:
+            self.setProperty('hero.clearlogo', '')
 
     def setDirty(self, *args, **kwargs):
         self._reloadOnReinit = True
@@ -3459,6 +3467,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 meta_parts.append(util.durationToText(obj.duration.asInt()))
             if obj.get('contentRating'):
                 meta_parts.append(obj.contentRating)
+            if obj.get('viewOffset') and obj.get('duration'):
+                remaining_ms = obj.duration.asInt() - obj.viewOffset.asInt()
+                if remaining_ms > 0:
+                    meta_parts.append('[COLOR FFE5A00D]{0} left[/COLOR]'.format(util.durationToText(remaining_ms)))
             self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
         elif obj_type == 'movie':
             self.setProperty('hero.title', obj.title or '')
@@ -3470,6 +3482,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 meta_parts.append(util.durationToText(obj.duration.asInt()))
             if obj.get('contentRating'):
                 meta_parts.append(obj.contentRating)
+            if obj.get('viewOffset') and obj.get('duration'):
+                remaining_ms = obj.duration.asInt() - obj.viewOffset.asInt()
+                if remaining_ms > 0:
+                    meta_parts.append('[COLOR FFE5A00D]{0} left[/COLOR]'.format(util.durationToText(remaining_ms)))
             self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
         elif obj_type == 'show':
             self.setProperty('hero.title', obj.title or '')
@@ -3503,6 +3519,17 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.setProperty('hero.subtitle', '')
             self.setProperty('hero.metadata', '')
 
+        # Clear logo
+        clearlogo_url = ''
+        if self.useClearLogos and obj.data is not None:
+            for img_elem in obj.data.findall('Image'):
+                if img_elem.attrib.get('type') == 'clearLogo':
+                    logo_path = img_elem.attrib.get('url', '')
+                    if logo_path and obj.server:
+                        clearlogo_url = obj.server.buildUrl(logo_path, includeToken=True)
+                    break
+        self.setProperty('hero.clearlogo', clearlogo_url)
+
         # Description
         summary = obj.get('summary') or ''
         if len(summary) > 800:
@@ -3531,13 +3558,19 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         else:
             self.setProperty('hero.art', '')
 
-        # Set hero background color from UltraBlurColors child XML element
+        # Set hero background colors from UltraBlurColors child XML element
         # e.g. <UltraBlurColors topLeft="123145" topRight="205a8f" bottomRight="27628f" bottomLeft="286582"/>
         hero_color = ''
         if obj.data is not None:
             ubc = obj.data.find('UltraBlurColors')
             if ubc is not None:
                 hero_color = ubc.attrib.get('bottomLeft') or ubc.attrib.get('topLeft') or ''
+                # Set all four corner colors for gradient background
+                for corner in ('topLeft', 'topRight', 'bottomRight', 'bottomLeft'):
+                    c = ubc.attrib.get(corner, '')
+                    if c:
+                        c = 'FF' + c.lstrip('#')
+                    self.setProperty('hero.color.{}'.format(corner), c)
         if hero_color:
             hero_color = 'FF' + hero_color.lstrip('#')
         self.setProperty('hero.color', hero_color)
@@ -3555,7 +3588,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         """Clear all hero section properties."""
         for prop in ('hero.title', 'hero.subtitle', 'hero.metadata',
                      'hero.description', 'hero.cast', 'hero.type', 'hero.art',
-                     'hero.color'):
+                     'hero.clearlogo', 'hero.color', 'hero.color.topLeft',
+                     'hero.color.topRight', 'hero.color.bottomRight',
+                     'hero.color.bottomLeft'):
             self.setProperty(prop, '')
 
     def displayServerAndUser(self, **kwargs):
@@ -4526,7 +4561,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.serverList.replaceItems(items)
             itemHeight = util.vscale(100, r=0)
 
-            self.getControl(800).setHeight((min(len(items), 9) * itemHeight) + 80)
+            listHeight = min(len(items), 9) * itemHeight
+            self.getControl(800).setHeight(listHeight + 80)
+
+            # Position dropdown so it grows upward from the server button area
+            buttonY = util.vscale(990, r=0)
+            dropdownY = buttonY - listHeight
+            self.getControl(802).setPosition(80, dropdownY)
 
             for item in items:
                 if item.dataSource != kodigui.DUMMY_DATA_SOURCE:

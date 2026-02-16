@@ -10,7 +10,7 @@
         <texture>script.plex/home/background-fallback_black.png</texture>
     </control>
 
-    <!-- Layer 1b: Colored background from UltraBlurColors (art fades into this) -->
+    <!-- Layer 1b: Colored background from UltraBlurColors -->
     <control type="image">
         <visible>!String.IsEmpty(Window.Property(hero.color))</visible>
         <posx>0</posx>
@@ -150,8 +150,19 @@
     <posy>{{ vscale(130) }}</posy>
     <width>900</width>
     <height>{{ vscale(420) }}</height>
-    <!-- Hero title (large) -->
+    <!-- Hero clear logo (replaces text title when available) -->
+    <control type="image">
+        <visible>!String.IsEmpty(Window.Property(hero.clearlogo))</visible>
+        <posx>115</posx>
+        <posy>{{ vscale(-55) }}</posy>
+        <width>600</width>
+        <height>{{ vscale(110) }}</height>
+        <texture background="true">$INFO[Window.Property(hero.clearlogo)]</texture>
+        <aspectratio align="left" aligny="center">keep</aspectratio>
+    </control>
+    <!-- Hero title text (fallback when no clear logo) -->
     <control type="label">
+        <visible>String.IsEmpty(Window.Property(hero.clearlogo))</visible>
         <posx>115</posx>
         <posy>0</posy>
         <width>720</width>
@@ -338,10 +349,10 @@
         <texture>script.plex/home/plex.png</texture>
     </control>
     <!-- Server dropdown (triggered from sidebar server button) -->
-    <control type="group">
+    <control type="group" id="802">
         <visible>Control.HasFocus(260) | !String.IsEmpty(Window.Property(show.servers))</visible>
         <posx>80</posx>
-        <posy>{{ vscale(42) }}</posy>
+        <posy>{{ vscale(890) }}</posy>
         <control type="image" id="800">
             <posx>-40</posx>
             <posy>{{ vscale(-40) }}</posy>
@@ -773,7 +784,25 @@
 
     <!-- No background panels - sidebar is transparent, content pushes right when expanded -->
 
-    <!-- User avatar area at top -->
+    <!-- User button at top (overlays avatar area) -->
+    <control type="button" id="202">
+        <posx>8</posx>
+        <posy>{{ vscale(30) }}</posy>
+        <width>284</width>
+        <height>{{ vscale(64) }}</height>
+        <font>font10</font>
+        <textcolor>00000000</textcolor>
+        <focusedcolor>00000000</focusedcolor>
+        <align>left</align>
+        <aligny>center</aligny>
+        <ondown>9001</ondown>
+        <onright>50</onright>
+        <texturefocus colordiffuse="FFE5A00D" border="10">script.plex/white-square-rounded.png</texturefocus>
+        <texturenofocus>-</texturenofocus>
+        <label> </label>
+        <onunfocus condition="!String.IsEmpty(Window.Property(show.options))">SetFocus(250)</onunfocus>
+    </control>
+    <!-- User avatar area at top (visual overlay, not focusable) -->
     <control type="group">
         <posx>0</posx>
         <posy>{{ vscale(30) }}</posy>
@@ -824,8 +853,8 @@
         <width>300</width>
         <height>{{ vscale(860) }}</height>
         <onright>50</onright>
-        <onup>noop</onup>
-        <ondown>noop</ondown>
+        <onup>202</onup>
+        <ondown>201</ondown>
         <scrolltime>200</scrolltime>
         <orientation>vertical</orientation>
         <focusposition>0</focusposition>
@@ -951,10 +980,10 @@
 
     <!-- Server button at bottom of sidebar -->
     <control type="button" id="201">
-        <posx>10</posx>
+        <posx>8</posx>
         <posy>{{ vscale(990) }}</posy>
-        <width>60</width>
-        <height>{{ vscale(40) }}</height>
+        <width>284</width>
+        <height>{{ vscale(50) }}</height>
         <font>font10</font>
         <textcolor>00000000</textcolor>
         <focusedcolor>00000000</focusedcolor>
@@ -969,37 +998,34 @@
         <label> </label>
         <onunfocus condition="!String.IsEmpty(Window.Property(show.servers))">SetFocus(260)</onunfocus>
     </control>
-    <!-- Server connection icon overlay -->
+    <!-- Server icon + name overlay -->
     <control type="group">
         <posx>10</posx>
         <posy>{{ vscale(990) }}</posy>
-        <width>60</width>
-        <height>{{ vscale(40) }}</height>
+        <width>280</width>
+        <height>{{ vscale(50) }}</height>
         <control type="image">
             <posx>15</posx>
-            <posy>{{ vscale(5) }}</posy>
+            <posy>{{ vscale(10) }}</posy>
             <width>30</width>
             <height>{{ vscale(30) }}</height>
             <texture>$INFO[Window.Property(server.icon)]</texture>
         </control>
-    </control>
-    <!-- User button at bottom of sidebar -->
-    <control type="button" id="202">
-        <posx>10</posx>
-        <posy>{{ vscale(1035) }}</posy>
-        <width>60</width>
-        <height>{{ vscale(40) }}</height>
-        <font>font10</font>
-        <textcolor>00000000</textcolor>
-        <focusedcolor>00000000</focusedcolor>
-        <align>center</align>
-        <aligny>center</aligny>
-        <onup>201</onup>
-        <onright>50</onright>
-        <texturefocus colordiffuse="FFE5A00D" border="10">script.plex/white-square-rounded.png</texturefocus>
-        <texturenofocus>-</texturenofocus>
-        <label> </label>
-        <onunfocus condition="!String.IsEmpty(Window.Property(show.options))">SetFocus(250)</onunfocus>
+        <!-- Server name (expanded only) -->
+        <control type="label">
+            <visible>ControlGroup(9000).HasFocus(0)</visible>
+            <animation effect="fade" start="0" end="100" time="200">Visible</animation>
+            <animation effect="fade" start="100" end="0" time="200">Hidden</animation>
+            <posx>55</posx>
+            <posy>0</posy>
+            <width>210</width>
+            <height>{{ vscale(50) }}</height>
+            <font>font10</font>
+            <align>left</align>
+            <aligny>center</aligny>
+            <textcolor>FFFFFFFF</textcolor>
+            <label>$INFO[Window.Property(server.name)]</label>
+        </control>
     </control>
 </control>
 {% endblock header %}

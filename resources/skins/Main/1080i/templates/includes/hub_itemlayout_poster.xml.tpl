@@ -56,7 +56,7 @@
                     <posy>0</posy>
                     <width>244</width>
                     <height>{{ vscale(10) }}</height>
-                    <texture>script.plex/white-square.png</texture>
+                    <texture diffuse="script.plex/progress/progress-diffuse-poster.png">script.plex/white-square.png</texture>
                     <colordiffuse>C0000000</colordiffuse>
                 </control>
                 <control type="image">
@@ -64,7 +64,7 @@
                     <posy>1</posy>
                     <width>244</width>
                     <height>{{ vscale(8) }}</height>
-                    <texture>$INFO[ListItem.Property(progress)]</texture>
+                    <texture diffuse="script.plex/progress/progress-diffuse-poster.png">$INFO[ListItem.Property(progress)]</texture>
                     <colordiffuse>FFCC7B19</colordiffuse>
                 </control>
             </control>

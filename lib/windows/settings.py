@@ -715,6 +715,11 @@ class Settings(object):
                     T(34090, 'Display hero spotlight with title, metadata, summary, and art at the top of the home screen. '
                              'Disabling this gives more space for hub rows.')
                 ),
+                BoolSetting(
+                    'use_clearlogos', 'Use Clear Logos', True
+                ).description(
+                    'Show clear logo images instead of text titles in the hero spotlight when available.'
+                ),
                 BoolUserSetting(
                     'use_watchlist', T(34007, 'Use Watchlist'), True
                 ).description(
