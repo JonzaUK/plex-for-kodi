@@ -14,7 +14,7 @@
                 <posy>{{ vscale(-40) }}</posy>
                 <width>324</width>
                 <height>{{ vscale(324) }}</height>
-                <texture border="42">script.plex/square-rounded-shadow.png</texture>
+                <texture border="42">script.plex/drop-shadow.png</texture>
                 <colordiffuse>40FFFFFF</colordiffuse>
             </control>
             <control type="group">
@@ -27,7 +27,7 @@
                         <posy>0</posy>
                         <width>244</width>
                         <height>{{ vscale(244) }}</height>
-                        <texture colordiffuse="FF404040">script.plex/white-rounded-square.png</texture>
+                        <texture colordiffuse="FF404040">script.plex/white-square.png</texture>
                     </control>
                     <control type="image">
                         <visible>String.IsEmpty(ListItem.Property(is.updating))</visible>
@@ -51,14 +51,14 @@
                     <posy>0</posy>
                     <width>244</width>
                     <height>{{ vscale(244) }}</height>
-                    <texture diffuse="script.plex/white-rounded-square.png">$INFO[ListItem.Property(thumb.fallback)]</texture>
+                    <texture>$INFO[ListItem.Property(thumb.fallback)]</texture>
                 </control>
                 <control type="image">
                     <posx>0</posx>
                     <posy>0</posy>
                     <width>244</width>
                     <height>{{ vscale(244) }}</height>
-                    <texture background="true" diffuse="script.plex/white-rounded-square.png">$INFO[ListItem.Thumb]</texture>
+                    <texture background="true">$INFO[ListItem.Thumb]</texture>
                     <aspectratio>scale</aspectratio>
                 </control>
                 <control type="group">
@@ -70,7 +70,7 @@
                         <posy>0</posy>
                         <width>244</width>
                         <height>{{ vscale(10) }}</height>
-                        <texture diffuse="script.plex/progress/progress-diffuse-square.png">script.plex/white-square.png</texture>
+                        <texture>script.plex/white-square.png</texture>
                         <colordiffuse>C0000000</colordiffuse>
                     </control>
                     <control type="image">
@@ -78,7 +78,7 @@
                         <posy>1</posy>
                         <width>244</width>
                         <height>{{ vscale(8) }}</height>
-                        <texture diffuse="script.plex/progress/progress-diffuse-square.png">$INFO[ListItem.Property(progress)]</texture>
+                        <texture>$INFO[ListItem.Property(progress)]</texture>
                         <colordiffuse>FFCC7B19</colordiffuse>
                     </control>
                 </control>
@@ -112,7 +112,7 @@
                 <posy>0</posy>
                 <width>254</width>
                 <height>{{ vscale(254) }}</height>
-                <texture border="14">script.plex/home/selected-rounded.png</texture>
+                <texture border="10">script.plex/home/selected-white.png</texture>
                 <colordiffuse>FFFFFFFF</colordiffuse>
             </control>
         </control>

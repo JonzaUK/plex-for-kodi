@@ -3526,7 +3526,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 if img_elem.attrib.get('type') == 'clearLogo':
                     logo_path = img_elem.attrib.get('url', '')
                     if logo_path and obj.server:
-                        clearlogo_url = obj.server.buildUrl(logo_path, includeToken=True)
+                        clearlogo_url = obj.server.getImageTranscodeURL(logo_path, 600, 110)
                     break
         self.setProperty('hero.clearlogo', clearlogo_url)
 
