@@ -531,10 +531,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                     break
 
             # Check poster/square prefixes from HUB_DISPLAY_DEFAULTS
+            # Also set ar16x9 flags if the display type is ar16x9
             if not identifier_has_known_prefix:
-                for prefix in self.HUB_DISPLAY_DEFAULTS:
+                for prefix, display_type in self.HUB_DISPLAY_DEFAULTS.items():
                     if identifier.startswith(prefix):
                         identifier_has_known_prefix = True
+                        if display_type == 'ar16x9':
+                            flags['ar16x9'] = True
+                            flags['with_art'] = True
                         break
 
         # Only detect from hub content if identifier doesn't have a known prefix
@@ -905,6 +909,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         'home.music.': 'square',
         'home.photos.': 'square',
         'home.videos.': 'ar16x9',
+        # Old-style split Continue Watching hub (episodes only)
+        'home.continue': 'ar16x9',
         # Hub prefixed variants
         'hub.tv.': 'poster',
         'hub.show.': 'poster',
@@ -3968,7 +3974,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         return mli
 
     def createEpisodeListItem(self, obj, wide=False):
-        mli = self.createGrandparentedListItem(obj, *self.THUMB_POSTER_DIM)
+        mli = self.createGrandparentedListItem(obj, *(self.THUMB_AR16X9_DIM if wide else self.THUMB_POSTER_DIM))
         if obj.index:
             subtitle = u'{0} \u2022 {1}'.format(T(32310, 'S').format(obj.parentIndex), T(32311, 'E').format(obj.index))
         else:
@@ -3998,7 +4004,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         return mli
 
     def createMovieListItem(self, obj, wide=False):
-        mli = kodigui.ManagedListItem(obj.defaultTitle, obj.year, thumbnailImage=obj.defaultThumb.asTranscodedImageURL(*self.THUMB_POSTER_DIM), data_source=obj)
+        if wide:
+            thumb = obj.defaultArt.asTranscodedImageURL(*self.THUMB_AR16X9_DIM)
+        else:
+            thumb = obj.defaultThumb.asTranscodedImageURL(*self.THUMB_POSTER_DIM)
+        mli = kodigui.ManagedListItem(obj.defaultTitle, obj.year, thumbnailImage=thumb, data_source=obj)
         mli.setProperty('thumb.fallback', 'script.plex/thumb_fallbacks/movie.png')
         if not obj.isWatched:
             mli.setProperty('unwatched', '1')
