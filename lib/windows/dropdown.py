@@ -164,7 +164,7 @@ class DropdownDialog(kodigui.BaseDialog):
 
         kodigui.BaseDialog.onAction(self, action)
 
-    def enterMoveMode(self, mli):
+    def enterMoveMode(self, mli, skip_first_select=True):
         """Enter moving mode for the given list item."""
         if not mli:
             return False
@@ -183,7 +183,7 @@ class DropdownDialog(kodigui.BaseDialog):
 
         self.movingItem = mli
         self.initialMovingPos = pos
-        self._justEnteredMoveMode = True  # Skip the next SELECT action (same click triggers both onClick and onAction)
+        self._justEnteredMoveMode = skip_first_select  # Skip SELECT only for direct clicks (not sub-menu)
         mli.setProperty('moving', '1')
         self.setProperty('moving', '1')
         return True
@@ -333,13 +333,17 @@ class DropdownDialog(kodigui.BaseDialog):
                     return
 
                 choice['sub'] = sub
+                mli.dataSource['sub'] = sub  # Propagate to dataSource so optionsCallback can read it
 
         self.choice = choice
         if self.optionsCallback:
             result = self.optionsCallback(self.optionsList, mli)
             # Check if callback wants to enter move mode
             if result == 'enter_move_mode':
-                self.enterMoveMode(mli)
+                self.enterMoveMode(mli)  # skip_first_select=True (direct click)
+                return
+            elif result == 'enter_move_mode_sub':
+                self.enterMoveMode(mli, skip_first_select=False)  # came via sub-menu
                 return
             # Check if callback wants to close and reopen the dialog
             if result == 'close_and_reopen':

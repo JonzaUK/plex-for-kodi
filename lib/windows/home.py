@@ -1128,7 +1128,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         return sorted(hubs_list, key=get_order)
 
-    def showHubSettingsDialog(self, section):
+    def showHubSettingsDialog(self, section, select_catalog_id=None):
         """Show dialog to manage hubs for the given section."""
 
         # Store the section key for use in the toggle callback
@@ -1277,6 +1277,15 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         options.append(dropdown.SEPARATOR)
         options.append({'key': 'reset_hubs', 'display': T(34081, "Reset to Default")})
 
+        # Build select_item if we want to pre-select a hub (e.g., after enabling)
+        select_item = None
+        if select_catalog_id:
+            for opt in options:
+                if opt and opt.get('catalog_id') == select_catalog_id:
+                    select_item = opt.copy()
+                    select_item['indicator'] = ''
+                    break
+
         try:
             choice = dropdown.showDropdown(
                 options,
@@ -1288,19 +1297,24 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 align_items="left",
                 close_only_with_back=True,
                 options_callback=self.onHubSettingToggle,
+                suboption_callback=self._hubSubOptionCallback,
                 dialog_props=self.carriedProps,
-                move_mode_callback=self._onHubMoveCallback
+                move_mode_callback=self._onHubMoveCallback,
+                select_item=select_item,
             )
         except Exception as e:
             util.ERROR('Hub Settings: Error showing dropdown: {}'.format(e))
             return
 
-        # Handle reopen request (e.g., after Reset to Defaults)
+        # Handle reopen request (e.g., after Reset to Defaults or enabling a hub)
         if choice and choice.get('reopen'):
             # Preserve the flag so refresh happens after reopen
             settings_changed = self._hubsSettingsChanged
+            # Pass pre-select catalog ID if set (enabling a hub)
+            select_hub = getattr(self, '_reopenSelectCatalogId', None)
+            self._reopenSelectCatalogId = None
             # Recursively reopen the dialog to show fresh state
-            self.showHubSettingsDialog(section)
+            self.showHubSettingsDialog(section, select_catalog_id=select_hub)
             # Restore flag and force refresh
             self._hubsSettingsChanged = settings_changed
             if settings_changed:
@@ -1324,6 +1338,23 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             else:
                 pass
 
+    def _hubSubOptionCallback(self, choice):
+        """Return sub-menu options for an enabled hub, or None if no sub-menu needed."""
+        if choice.get('key') != 'toggle_hub' or not choice.get('enabled'):
+            return None  # No sub-menu for disabled hubs or Reset button
+
+        catalog_id = choice.get('catalog_id')
+        section_key = getattr(self, '_managingHubsForSection', None)
+
+        can_move_up, can_move_down = self._canMoveHub(catalog_id, section_key)
+        can_move = can_move_up or can_move_down
+
+        options = []
+        if can_move:
+            options.append({'key': 'move', 'display': T(34089, 'Move')})
+        options.append({'key': 'disable', 'display': T(34085, 'Disable')})
+        return options
+
     def onHubSettingToggle(self, optionsList, mli):
         """Callback when a hub is toggled in the settings dialog."""
         choice = mli.dataSource
@@ -1346,21 +1377,33 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_key = getattr(self, '_managingHubsForSection', self.lastSection.key)
         is_currently_enabled = choice.get('enabled', False)
 
-        # If hub is currently enabled, enter move mode for pick-and-place reordering
+        # If hub is currently enabled, show Move/Disable sub-menu
         if is_currently_enabled:
-            # Ensure custom config exists before entering move mode
+            # Ensure custom config exists before any move/disable action
             config_created = self._ensureCustomConfigExists(section_key)
             if config_created:
-                # Refresh dialog to show position numbers now that config exists
                 self._refreshHubSettingsDialog(optionsList, section_key)
 
-            # Store references for move mode
-            self._movingHubCatalogId = catalog_id
-            self._movingHubSectionKey = section_key
-            self._movingHubOptionsList = optionsList
+            sub = choice.get('sub')  # Set by _hubSubOptionCallback framework
+            if not sub:
+                return None  # User cancelled sub-menu
 
-            # Signal dropdown to enter move mode
-            return 'enter_move_mode'
+            if sub.get('key') == 'move':
+                # Enter pick-and-place move mode (via sub-menu — don't eat next SELECT)
+                self._movingHubCatalogId = catalog_id
+                self._movingHubSectionKey = section_key
+                self._movingHubOptionsList = optionsList
+                return 'enter_move_mode_sub'
+
+            elif sub.get('key') == 'disable':
+                self._disableHub(catalog_id, section_key)
+                choice['enabled'] = False
+                mli.setProperty('indicator', '')
+                mli.setThumbnailImage('')
+                self._refreshHubSettingsDialog(optionsList, section_key)
+                self._hubsSettingsChanged = True
+
+            return None  # Stay open
         else:
             new_enabled = True
 
@@ -1431,9 +1474,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         mli.setProperty('indicator', indicator)
         mli.setThumbnailImage(indicator)
 
-
         # Mark that settings changed - refresh will happen after dialog closes
         self._hubsSettingsChanged = True
+
+        # After enabling a hub, reopen the dialog so user can move it immediately
+        self._reopenSelectCatalogId = catalog_id
+        return 'close_and_reopen'
 
     def _onHubMoveCallback(self, action, mli, old_pos, new_pos):
         """Handle move mode callbacks from the dropdown dialog.
@@ -1460,12 +1506,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 self._refreshHubSettingsDialog(optionsList, section_key)
             self.saveHubSettings()
             self._hubsSettingsChanged = True
-
-            # Show disable option if user confirmed without moving (second click pattern)
-            if old_pos == new_pos and mli:
-                choice = mli.dataSource
-                if choice and choice.get('enabled'):
-                    self._showDisableConfirmation(choice, section_key, optionsList)
         elif action == 'cancel':
             # Restore original position - the dropdown already moved the item back visually
             # We need to restore the data order as well
@@ -1518,25 +1558,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if optionsList:
             self._refreshHubSettingsDialog(optionsList, section_key)
 
-    def _showDisableConfirmation(self, choice, section_key, optionsList):
-        """Show disable confirmation when user clicks on a hub without moving it."""
-        hub_title = choice.get('hub_info', {}).get('title', choice.get('identifier', 'Hub'))
-        catalog_id = choice.get('catalog_id', choice.get('identifier'))
-
-        # Show simple disable confirmation
-        result = optionsdialog.show(
-            header=hub_title,
-            info=T(34086, 'Choose action'),
-            button0=T(34085, 'Disable'),
-        )
-
-        if result == 0:
-            # Disable the hub
-            self._disableHub(catalog_id, section_key)
-            if optionsList:
-                self._refreshHubSettingsDialog(optionsList, section_key)
-            self._hubsSettingsChanged = True
-
     def _disableHub(self, catalog_id, section_key):
         """Disable a hub by removing it from the enabled list."""
         if not self.hubSettings:
@@ -1558,54 +1579,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             hub_config['order'] = idx
 
         self.saveHubSettings()
-
-    def _showHubActionMenu(self, choice, section_key, optionsList):
-        """Show action menu for an enabled hub: Move Up, Move Down, Disable.
-        NOTE: This is now only used as fallback - pick-and-place is the primary UX."""
-        hub_title = choice.get('hub_info', {}).get('title', choice.get('identifier', 'Hub'))
-
-        # Ensure custom config exists before checking move capabilities
-        config_created = self._ensureCustomConfigExists(section_key)
-        if config_created:
-            # Refresh dialog to show position numbers now that config exists
-            self._refreshHubSettingsDialog(optionsList, section_key)
-
-        # Check if hub can move up or down
-        can_move_up, can_move_down = self._canMoveHub(choice.get('catalog_id'), section_key)
-
-        # Build button labels
-        buttons = []
-        button_actions = []
-
-        if can_move_up:
-            buttons.append(T(34083, 'Move Up'))
-            button_actions.append('move_up')
-
-        if can_move_down:
-            buttons.append(T(34084, 'Move Down'))
-            button_actions.append('move_down')
-
-        buttons.append(T(34085, 'Disable'))
-        button_actions.append('disable')
-
-        # If only one action (disable), just return it without showing menu
-        if len(buttons) == 1:
-            return 'disable'
-
-        # Show options dialog - use simple approach with available buttons
-        result = optionsdialog.show(
-            header=hub_title,
-            info=T(34086, 'Choose action'),
-            button0=buttons[0] if len(buttons) > 0 else None,
-            button1=buttons[1] if len(buttons) > 1 else None,
-            button2=buttons[2] if len(buttons) > 2 else None,
-        )
-
-        if result is None:
-            return None
-        if result < len(button_actions):
-            return button_actions[result]
-        return None
 
     def _ensureCustomConfigExists(self, section_key):
         """Ensure custom hub config exists for a section, initializing with defaults if needed.
