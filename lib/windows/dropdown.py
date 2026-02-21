@@ -54,6 +54,7 @@ class DropdownDialog(kodigui.BaseDialog):
         self.moveModeCallback = kwargs.get('move_mode_callback')  # Callback for move operations
         self.moveUpperBound = None  # First position that can't be moved to (separator boundary)
         self._justEnteredMoveMode = False  # Flag to skip the SELECT that entered move mode
+        self._adjustedY = None  # Actual y position used after overflow adjustment (set in onFirstInit)
 
     @property
     def x(self):
@@ -94,6 +95,7 @@ class DropdownDialog(kodigui.BaseDialog):
         if y == "middle":
             y = util.vperci(util.vscale(ol_height))
 
+        self._adjustedY = int(y)
         self.getControl(100).setPosition(self.x, int(y))
         if self.header:
             shadowControl.setPosition(-60, util.vscalei(-106))
@@ -323,10 +325,24 @@ class DropdownDialog(kodigui.BaseDialog):
                 if self.selectItem and self.selectItem.get("sub"):
                     sub_select = self.selectItem["sub"]
 
+                # Position sub-menu to the right of the main list, aligned with the selected item.
+                # Container(id).Position returns the cursor row within the VISIBLE area (0 = top
+                # visible item), which correctly accounts for scroll — unlike getSelectedPos()
+                # which returns the absolute index.
+                try:
+                    visual_row = int(xbmc.getInfoLabel('Container({}).Position'.format(self.OPTIONS_LIST_ID)))
+                    if visual_row < 0:
+                        raise ValueError('negative')
+                except (ValueError, TypeError):
+                    visual_row = self.optionsList.getSelectedPos()
+                list_y = self._adjustedY if self._adjustedY is not None else int(self.y)
+                sub_x = self.x + self.dropWidth - 40  # between content edge and shadow edge of main list
+                sub_y = list_y + visual_row * self.optionHeight
+
                 # disable scrollbar temporarily
                 oldprop = self.getBoolProperty('scroll')
                 self.setBoolProperty('scroll', False)
-                sub = showDropdown(options, (self.x + 290, self.y + 10), close_direction='left',
+                sub = showDropdown(options, (sub_x, sub_y), close_direction='left',
                                    with_indicator=True, select_item=sub_select, is_sub_list=True)
                 self.setBoolProperty('scroll', oldprop)
                 if not sub:
