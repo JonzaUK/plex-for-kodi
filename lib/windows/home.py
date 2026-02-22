@@ -1660,33 +1660,36 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def _canMoveHub(self, catalog_id, section_key):
         """Check if a hub can move up or down in the order."""
-        if not self.hubSettings:
-            return False, False
-
         # Normalize key for lookup
         config_key = str(section_key) if section_key is not None else None
-        section_config = self.hubSettings.get(config_key)
-        if not section_config or not section_config.get('custom'):
-            return False, False
 
-        hubs = section_config.get('hubs', [])
-        if len(hubs) <= 1:
-            return False, False
+        if self.hubSettings:
+            section_config = self.hubSettings.get(config_key)
+            if section_config and section_config.get('custom'):
+                hubs = section_config.get('hubs', [])
+                if len(hubs) <= 1:
+                    return False, False
 
-        # Find the hub's current position
-        current_idx = None
-        for idx, hub_config in enumerate(hubs):
-            if hub_config.get('catalog_id') == catalog_id:
-                current_idx = idx
-                break
+                # Find the hub's current position
+                current_idx = None
+                for idx, hub_config in enumerate(hubs):
+                    if hub_config.get('catalog_id') == catalog_id:
+                        current_idx = idx
+                        break
 
-        if current_idx is None:
-            return False, False
+                if current_idx is None:
+                    return False, False
 
-        can_move_up = current_idx > 0
-        can_move_down = current_idx < len(hubs) - 1
+                can_move_up = current_idx > 0
+                can_move_down = current_idx < len(hubs) - 1
+                return can_move_up, can_move_down
 
-        return can_move_up, can_move_down
+        # No custom config yet - fall back to sectionHubs count.
+        # _ensureCustomConfigExists will create the config when the user picks Move,
+        # so we just need to know whether moving is possible at all.
+        cached_hubs = self.sectionHubs.get(section_key, [])
+        can_move = len(cached_hubs) > 1
+        return can_move, can_move
 
     def _moveHubInOrder(self, catalog_id, section_key, direction):
         """Move a hub up (-1) or down (+1) in the order."""
