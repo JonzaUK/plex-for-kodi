@@ -3020,9 +3020,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                                     }
                                    )
 
-            # Add Manage Hubs option
-            options.append(dropdown.SEPARATOR)
-            options.append({'key': 'manage_hubs', 'display': T(34080, "Manage Hubs")})
+            # Add Manage Hubs option (not applicable to watchlist - it has no library hubs)
+            if section != watchlist_section:
+                options.append(dropdown.SEPARATOR)
+                options.append({'key': 'manage_hubs', 'display': T(34080, "Manage Hubs")})
 
             choice = dropdown.showDropdown(
                 options,
@@ -4164,7 +4165,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
             wide = with_art
             no_spoilers = False
-            if obj.type == 'episode' and hub.hubIdentifier in ("continueWatching", "home.continue", "home.ondeck") and self.spoilerSetting != "off":
+            if obj.type == 'episode' and hub.hubIdentifier in ("continueWatching", "home.continue", "home.ondeck", "watchlist.continueWatching") and self.spoilerSetting != "off":
                 check_spoilers = True
                 obj._noSpoilers = no_spoilers = self.hideSpoilers(obj, use_cache=False)
 
