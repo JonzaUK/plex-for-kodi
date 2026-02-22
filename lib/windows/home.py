@@ -1059,15 +1059,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         else:
             catalog_id = '{}:{}'.format(section_key, identifier)
 
-        # Check if this hub is in the enabled list
-        configured_hubs = section_config.get('hubs', [])
-        for hub_config in configured_hubs:
-            config_catalog_id = hub_config.get('catalog_id', hub_config.get('identifier'))
-            if config_catalog_id == catalog_id:
-                return False  # Hub is enabled, not hidden
-
-        # Hub is not in enabled list, so it's hidden
-        return True
+        # Use getEnabledHubsForSection so CW mode mapping is applied consistently.
+        # (e.g. config has 'continueWatching' but old mode expects 'home.continue'/'home.ondeck')
+        enabled = self.getEnabledHubsForSection(section_key)
+        if enabled is None:
+            return False
+        return catalog_id not in enabled
 
     def sortHubsByUserOrder(self, hubs, is_home=False, section_key=None):
         """Sort hubs by user-defined order, preserving server order for unordered hubs."""
@@ -1153,6 +1150,43 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         section_config = self.hubSettings.get(config_key, {}) if self.hubSettings else {}
         has_custom_config = section_config.get('custom', False)
         configured_hubs = section_config.get('hubs', []) if has_custom_config else []
+
+        # Normalize CW mode in config: migrate stale hub IDs to match current setting.
+        # This fixes the dialog showing the wrong enabled state after switching CW modes,
+        # and ensures _moveHubToPosition can find hubs by index (it requires an explicit entry).
+        if section_key is None and has_custom_config and configured_hubs:
+            use_new_cw = util.getSetting('use_new_cw', True)
+            configured_ids = {h.get('catalog_id', h.get('identifier')) for h in configured_hubs}
+            if use_new_cw and ('home.continue' in configured_ids or 'home.ondeck' in configured_ids) \
+                    and 'continueWatching' not in configured_ids:
+                # Old-style split hubs in config but new CW mode is active: collapse to continueWatching
+                old_entries = [h for h in configured_hubs
+                               if h.get('catalog_id') in ('home.continue', 'home.ondeck')]
+                min_order = min(h.get('order', 999) for h in old_entries)
+                new_hubs = [h for h in configured_hubs
+                            if h.get('catalog_id') not in ('home.continue', 'home.ondeck')]
+                new_hubs.append({'catalog_id': 'continueWatching', 'order': min_order})
+                new_hubs.sort(key=lambda h: h.get('order', 999))
+                for i, h in enumerate(new_hubs):
+                    h['order'] = i
+                section_config['hubs'] = new_hubs
+                configured_hubs = new_hubs
+                self.saveHubSettings()
+            elif not use_new_cw and 'continueWatching' in configured_ids \
+                    and 'home.continue' not in configured_ids and 'home.ondeck' not in configured_ids:
+                # New-style combined hub in config but old CW mode is active: expand to split hubs
+                cw_entry = next(h for h in configured_hubs if h.get('catalog_id') == 'continueWatching')
+                cw_order = cw_entry.get('order', 0)
+                new_hubs = [h for h in configured_hubs if h.get('catalog_id') != 'continueWatching']
+                new_hubs.append({'catalog_id': 'home.continue', 'order': cw_order})
+                new_hubs.append({'catalog_id': 'home.ondeck', 'order': cw_order + 0.5})
+                new_hubs.sort(key=lambda h: h.get('order', 999))
+                for i, h in enumerate(new_hubs):
+                    h['order'] = i
+                section_config['hubs'] = new_hubs
+                configured_hubs = new_hubs
+                self.saveHubSettings()
+
         configured_catalog_ids = {h.get('catalog_id', h.get('identifier')) for h in configured_hubs}
 
         # Build position map for enabled hubs (1-based for display)
