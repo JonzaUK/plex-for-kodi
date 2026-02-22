@@ -343,7 +343,8 @@ class DropdownDialog(kodigui.BaseDialog):
                 oldprop = self.getBoolProperty('scroll')
                 self.setBoolProperty('scroll', False)
                 sub = showDropdown(options, (sub_x, sub_y), close_direction='left',
-                                   with_indicator=True, select_item=sub_select, is_sub_list=True)
+                                   with_indicator=True, select_item=sub_select, is_sub_list=True,
+                                   dialog_props=self.dialogProps)
                 self.setBoolProperty('scroll', oldprop)
                 if not sub:
                     return
