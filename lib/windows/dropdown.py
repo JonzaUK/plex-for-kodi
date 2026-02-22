@@ -395,6 +395,7 @@ class DropdownDialog(kodigui.BaseDialog):
                 ds["indicator"] = ''
                 item = kodigui.ManagedListItem(o['display'], thumbnailImage=o.get('indicator', ''), data_source=ds)
                 item.setProperty('with.indicator', self.withIndicator and '1' or '')
+                item.setProperty('has.submenu', '1' if o.get('has_submenu') else '')
                 item.setProperty('align', self.alignItems)
                 items.append(item)
                 options.append(o)

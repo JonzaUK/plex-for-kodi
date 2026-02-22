@@ -1236,6 +1236,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 'enabled': is_enabled,
                 'display': display_title,
                 'indicator': indicator,
+                'has_submenu': is_enabled,
             }
 
         # Show enabled hubs first, in their configured order
