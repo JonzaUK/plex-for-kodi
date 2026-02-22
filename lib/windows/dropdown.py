@@ -343,8 +343,14 @@ class DropdownDialog(kodigui.BaseDialog):
                 oldprop = self.getBoolProperty('scroll')
                 self.setBoolProperty('scroll', False)
                 sub = showDropdown(options, (sub_x, sub_y), close_direction='left',
-                                   with_indicator=True, select_item=sub_select, is_sub_list=True,
-                                   dialog_props=self.dialogProps)
+                                   with_indicator=True, select_item=sub_select, is_sub_list=True)
+                # Restore home window properties (e.g. hub.text2lines.*) that Kodi clears
+                # when a new dialog opens. Can't pass dialog_props to the sub-dropdown as it
+                # interferes with BaseDialog init before the dialog is shown.
+                if self.dialogProps:
+                    win = xbmcgui.Window(xbmcgui.getCurrentWindowId())
+                    for key, value in self.dialogProps.items():
+                        win.setProperty(key, value)
                 self.setBoolProperty('scroll', oldprop)
                 if not sub:
                     return
