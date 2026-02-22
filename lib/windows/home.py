@@ -903,6 +903,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         # Video hubs - ar16x9
         'video.': 'ar16x9',
         'hub.video.': 'ar16x9',
+        # Watchlist/discover hubs - always poster (mixed movies + episodes, matches Pannal's original intent)
+        'watchlist.': 'poster',
         # Home merged hubs
         'home.television.': 'poster',
         'home.movies.': 'poster',
