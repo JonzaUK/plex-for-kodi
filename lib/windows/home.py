@@ -1127,7 +1127,122 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         return sorted(hubs_list, key=get_order)
 
-    def showHubSettingsDialog(self, section, select_catalog_id=None):
+    def _buildHubSettingsOptions(self, section_key, section_title):
+        """Build the list of option dicts for the hub settings dialog."""
+        config_key = str(section_key) if section_key is not None else None
+        section_config = self.hubSettings.get(config_key, {}) if self.hubSettings else {}
+        has_custom_config = section_config.get('custom', False)
+        configured_hubs = section_config.get('hubs', []) if has_custom_config else []
+
+        configured_catalog_ids = {h.get('catalog_id', h.get('identifier')) for h in configured_hubs}
+
+        # Build position map for enabled hubs (1-based for display)
+        enabled_positions = {}
+        for idx, hub_config in enumerate(configured_hubs):
+            cat_id = hub_config.get('catalog_id', hub_config.get('identifier'))
+            enabled_positions[cat_id] = idx + 1
+
+        # Determine enabled/disabled state for all hubs
+        hub_states = {}  # catalog_id -> (is_enabled, hub_info)
+        for catalog_id, hub_info in self.availableHubs.items():
+            if has_custom_config:
+                is_enabled = catalog_id in configured_catalog_ids
+            else:
+                hub_source_key = hub_info.get('source_section_key')
+                if section_key is None:
+                    # Home section - all native Plex Home hubs are enabled by default
+                    is_enabled = (hub_source_key is None)
+                else:
+                    # Library section - native hubs enabled by default (compare as strings)
+                    is_enabled = (str(hub_source_key) == str(section_key) if hub_source_key is not None else False)
+            hub_states[catalog_id] = (is_enabled, hub_info)
+
+        # Helper to create option entry
+        def make_option(catalog_id, hub_info, is_enabled, position=None):
+            base_title = hub_info.get('title', catalog_id)
+            source_label = hub_info.get('source_section_title', 'Unknown')
+            if position is not None:
+                display_title = u'{}. {} [{}]'.format(position, base_title, source_label)
+            else:
+                display_title = u'{} [{}]'.format(base_title, source_label)
+            indicator = 'script.plex/indicators/circle-19.png' if is_enabled else ''
+            return {
+                'key': 'toggle_hub',
+                'catalog_id': catalog_id,
+                'identifier': hub_info.get('identifier', catalog_id),
+                'hub_info': hub_info,
+                'enabled': is_enabled,
+                'display': display_title,
+                'indicator': indicator,
+                'has_submenu': is_enabled,
+            }
+
+        # Show enabled hubs first, in their configured order
+        options = []
+        enabled_hubs_shown = set()
+        if has_custom_config and configured_hubs:
+            for idx, hub_config in enumerate(configured_hubs):
+                cat_id = hub_config.get('catalog_id', hub_config.get('identifier'))
+                if cat_id in hub_states:
+                    is_enabled, hub_info = hub_states[cat_id]
+                    if is_enabled:
+                        options.append(make_option(cat_id, hub_info, True, position=idx + 1))
+                        enabled_hubs_shown.add(cat_id)
+        else:
+            # No custom config - show enabled hubs in ACTUAL SCREEN ORDER from sectionHubs
+            ordered_catalog_ids = []
+            cached_hubs = self.sectionHubs.get(section_key, [])
+            is_home = section_key is None
+            for hub in cached_hubs:
+                identifier = hub.getCleanHubIdentifier(is_home=is_home)
+                if is_home:
+                    catalog_id = identifier
+                else:
+                    catalog_id = '{}:{}'.format(section_key, identifier)
+                if catalog_id in hub_states:
+                    is_enabled, hub_info = hub_states[catalog_id]
+                    if is_enabled:
+                        ordered_catalog_ids.append((catalog_id, hub_info))
+            for idx, (catalog_id, hub_info) in enumerate(ordered_catalog_ids):
+                options.append(make_option(catalog_id, hub_info, True, position=idx + 1))
+                enabled_hubs_shown.add(catalog_id)
+
+        # Separator between enabled and disabled hubs
+        if options:
+            options.append(dropdown.SEPARATOR)
+
+        # Group remaining hubs by source section
+        hubs_by_source = {}
+        for catalog_id, (is_enabled, hub_info) in hub_states.items():
+            if catalog_id in enabled_hubs_shown:
+                continue
+            source = hub_info.get('source_section_title', 'Unknown')
+            if source not in hubs_by_source:
+                hubs_by_source[source] = []
+            hubs_by_source[source].append((catalog_id, hub_info, is_enabled))
+
+        # Sort sources: current section first, then Home, then alphabetically
+        def source_sort_key(x):
+            if str(x) == str(section_title):
+                return (0, str(x))
+            if str(x) == 'Home':
+                return (1, str(x))
+            return (2, str(x))
+
+        sorted_sources = sorted(hubs_by_source.keys(), key=source_sort_key)
+        for source in sorted_sources:
+            if options and options[-1] != dropdown.SEPARATOR:
+                options.append(dropdown.SEPARATOR)
+            for catalog_id, hub_info, is_enabled in sorted(hubs_by_source[source], key=lambda x: x[1].get('title', '')):
+                options.append(make_option(catalog_id, hub_info, is_enabled))
+
+        # Reset option at the end
+        options.append(dropdown.SEPARATOR)
+        options.append({'key': 'reset_hubs', 'display': T(34081, "Reset to Default")})
+
+        return options
+
+    def showHubSettingsDialog(self, section):
         """Show dialog to manage hubs for the given section."""
 
         # Store the section key for use in the toggle callback
@@ -1144,6 +1259,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         section_key = section.key  # None for Home
         section_title = section.title if hasattr(section, 'title') else 'Home'
+        self._managingHubsForSectionTitle = section_title
 
         # Normalize key for config lookup
         config_key = str(section_key) if section_key is not None else None
@@ -1172,7 +1288,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 for i, h in enumerate(new_hubs):
                     h['order'] = i
                 section_config['hubs'] = new_hubs
-                configured_hubs = new_hubs
                 self.saveHubSettings()
             elif not use_new_cw and 'continueWatching' in configured_ids \
                     and 'home.continue' not in configured_ids and 'home.ondeck' not in configured_ids:
@@ -1186,142 +1301,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 for i, h in enumerate(new_hubs):
                     h['order'] = i
                 section_config['hubs'] = new_hubs
-                configured_hubs = new_hubs
                 self.saveHubSettings()
 
-        configured_catalog_ids = {h.get('catalog_id', h.get('identifier')) for h in configured_hubs}
-
-        # Build position map for enabled hubs (1-based for display)
-        enabled_positions = {}
-        for idx, hub_config in enumerate(configured_hubs):
-            cat_id = hub_config.get('catalog_id', hub_config.get('identifier'))
-            enabled_positions[cat_id] = idx + 1
-
-
-        # Build list of all available hubs with their current state
-        options = []
-
-        # First, determine enabled/disabled state for all hubs
-        hub_states = {}  # catalog_id -> (is_enabled, hub_info)
-        for catalog_id, hub_info in self.availableHubs.items():
-            if has_custom_config:
-                is_enabled = catalog_id in configured_catalog_ids
-            else:
-                hub_source_key = hub_info.get('source_section_key')
-
-                if section_key is None:
-                    # Home section - all native Plex Home hubs are enabled by default
-                    is_enabled = (hub_source_key is None)
-                else:
-                    # Library section - native hubs enabled by default (compare as strings)
-                    is_enabled = (str(hub_source_key) == str(section_key) if hub_source_key is not None else False)
-
-            hub_states[catalog_id] = (is_enabled, hub_info)
-
-        # Helper to create option entry
-        def make_option(catalog_id, hub_info, is_enabled, position=None):
-            base_title = hub_info.get('title', catalog_id)
-            source_label = hub_info.get('source_section_title', 'Unknown')
-
-            if position is not None:
-                display_title = u'{}. {} [{}]'.format(position, base_title, source_label)
-            else:
-                display_title = u'{} [{}]'.format(base_title, source_label)
-
-            indicator = 'script.plex/indicators/circle-19.png' if is_enabled else ''
-
-            return {
-                'key': 'toggle_hub',
-                'catalog_id': catalog_id,
-                'identifier': hub_info.get('identifier', catalog_id),
-                'hub_info': hub_info,
-                'enabled': is_enabled,
-                'display': display_title,
-                'indicator': indicator,
-                'has_submenu': is_enabled,
-            }
-
-        # Show enabled hubs first, in their configured order
-        enabled_hubs_shown = set()
-        if has_custom_config and configured_hubs:
-            # Add "Enabled" section header conceptually (separator will be added after)
-            for idx, hub_config in enumerate(configured_hubs):
-                cat_id = hub_config.get('catalog_id', hub_config.get('identifier'))
-                if cat_id in hub_states:
-                    is_enabled, hub_info = hub_states[cat_id]
-                    if is_enabled:
-                        options.append(make_option(cat_id, hub_info, True, position=idx + 1))
-                        enabled_hubs_shown.add(cat_id)
-        else:
-            # No custom config - show enabled hubs in ACTUAL SCREEN ORDER from sectionHubs
-            # This ensures the dialog matches what the user sees on screen
-            ordered_catalog_ids = []
-
-            # Get hubs in screen order from sectionHubs
-            cached_hubs = self.sectionHubs.get(section_key, [])
-            is_home = section_key is None
-
-            for hub in cached_hubs:
-                identifier = hub.getCleanHubIdentifier(is_home=is_home)
-                if is_home:
-                    catalog_id = identifier
-                else:
-                    catalog_id = '{}:{}'.format(section_key, identifier)
-                if catalog_id in hub_states:
-                    is_enabled, hub_info = hub_states[catalog_id]
-                    if is_enabled:
-                        ordered_catalog_ids.append((catalog_id, hub_info))
-
-            for idx, (catalog_id, hub_info) in enumerate(ordered_catalog_ids):
-                options.append(make_option(catalog_id, hub_info, True, position=idx + 1))
-                enabled_hubs_shown.add(catalog_id)
-
-        # Add separator between enabled and disabled hubs
-        if options:
-            options.append(dropdown.SEPARATOR)
-
-        # Group remaining (disabled) hubs by source section
-        hubs_by_source = {}
-        for catalog_id, (is_enabled, hub_info) in hub_states.items():
-            if catalog_id in enabled_hubs_shown:
-                continue  # Already shown in enabled section
-            source = hub_info.get('source_section_title', 'Unknown')
-            if source not in hubs_by_source:
-                hubs_by_source[source] = []
-            hubs_by_source[source].append((catalog_id, hub_info, is_enabled))
-
-        # Sort sources: current section first, then Home, then alphabetically
-        def source_sort_key(x):
-            if str(x) == str(section_title):
-                return (0, str(x))
-            if str(x) == 'Home':
-                return (1, str(x))
-            return (2, str(x))
-
-        sorted_sources = sorted(hubs_by_source.keys(), key=source_sort_key)
-
-        for source in sorted_sources:
-            if options and options[-1] != dropdown.SEPARATOR:
-                options.append(dropdown.SEPARATOR)
-
-            for catalog_id, hub_info, is_enabled in sorted(hubs_by_source[source], key=lambda x: x[1].get('title', '')):
-                options.append(make_option(catalog_id, hub_info, is_enabled))
-
+        options = self._buildHubSettingsOptions(section_key, section_title)
         if not options:
             return
-
-        # Add Reset option at the end
-        options.append(dropdown.SEPARATOR)
-        options.append({'key': 'reset_hubs', 'display': T(34081, "Reset to Default")})
-
-        # Build select_item if we want to pre-select a hub (e.g., after enabling)
-        select_item = None
-        if select_catalog_id:
-            for opt in options:
-                if opt and opt.get('catalog_id') == select_catalog_id:
-                    select_item = opt.copy()
-                    select_item['indicator'] = ''
-                    break
 
         try:
             choice = dropdown.showDropdown(
@@ -1337,43 +1321,17 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 suboption_callback=self._hubSubOptionCallback,
                 dialog_props=self.carriedProps,
                 move_mode_callback=self._onHubMoveCallback,
-                select_item=select_item,
             )
         except Exception as e:
             util.ERROR('Hub Settings: Error showing dropdown: {}'.format(e))
             return
 
-        # Handle reopen request (e.g., after Reset to Defaults or enabling a hub)
-        if choice and choice.get('reopen'):
-            # Preserve the flag so refresh happens after reopen
-            settings_changed = self._hubsSettingsChanged
-            # Pass pre-select catalog ID if set (enabling a hub)
-            select_hub = getattr(self, '_reopenSelectCatalogId', None)
-            self._reopenSelectCatalogId = None
-            # Recursively reopen the dialog to show fresh state
-            self.showHubSettingsDialog(section, select_catalog_id=select_hub)
-            # Restore flag and force refresh
-            self._hubsSettingsChanged = settings_changed
-            if settings_changed:
-                self.showHubs(self.lastSection, update=False, force=True)
-            return
-
-        # Handle final choice (Reset) - legacy path, kept for safety
-        if choice and choice.get('key') == 'reset_hubs':
-            self.resetSectionHubs(section_key)
-            self._hubsSettingsChanged = True
-
-        # Refresh the section after dialog closes if any changes were made
+        # Refresh the home screen after dialog closes if any changes were made
         if self._hubsSettingsChanged:
-            # Use string comparison to handle potential type mismatches
             str_last_key = str(self.lastSection.key) if self.lastSection and self.lastSection.key is not None else None
             str_section_key = str(section_key) if section_key is not None else None
             if self.lastSection and (str_last_key == str_section_key or self.lastSection.key == section_key):
-                # Use force=True to ensure fresh fetch after settings change
-                # This handles both reordering and newly enabled cross-section hubs
                 self.showHubs(self.lastSection, update=False, force=True)
-            else:
-                pass
 
     def _hubSubOptionCallback(self, choice):
         """Return sub-menu options for an enabled hub, or None if no sub-menu needed."""
@@ -1398,13 +1356,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if not choice:
             return
 
-        # Handle Reset to Defaults - close dialog and reopen to show fresh state
+        # Handle Reset to Defaults - rebuild list in place
         if choice.get('key') == 'reset_hubs':
             section_key = getattr(self, '_managingHubsForSection', self.lastSection.key)
+            section_title = getattr(self, '_managingHubsForSectionTitle', '')
             self.resetSectionHubs(section_key)
             self._hubsSettingsChanged = True
-            # Return special value to close dialog, then reopen it
-            return 'close_and_reopen'
+            options = self._buildHubSettingsOptions(section_key, section_title)
+            return ('rebuild', options, 0)
 
         if choice.get('key') != 'toggle_hub':
             return
@@ -1433,10 +1392,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 return 'enter_move_mode_sub'
 
             elif sub.get('key') == 'disable':
+                focus_pos = optionsList.getSelectedPos()
                 self._disableHub(catalog_id, section_key)
                 self._hubsSettingsChanged = True
-                self._reopenSelectCatalogId = catalog_id
-                return 'close_and_reopen'
+                section_title = getattr(self, '_managingHubsForSectionTitle', '')
+                options = self._buildHubSettingsOptions(section_key, section_title)
+                return ('rebuild', options, focus_pos)
 
             return None  # Stay open
         else:
@@ -1502,19 +1463,12 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             })
 
         self.saveHubSettings()
-
-        # Update the list item indicator
-        choice['enabled'] = new_enabled
-        indicator = 'script.plex/indicators/circle-19.png' if new_enabled else ''
-        mli.setProperty('indicator', indicator)
-        mli.setThumbnailImage(indicator)
-
-        # Mark that settings changed - refresh will happen after dialog closes
         self._hubsSettingsChanged = True
 
-        # After enabling a hub, reopen the dialog so user can move it immediately
-        self._reopenSelectCatalogId = catalog_id
-        return 'close_and_reopen'
+        focus_pos = optionsList.getSelectedPos()
+        section_title = getattr(self, '_managingHubsForSectionTitle', '')
+        options = self._buildHubSettingsOptions(section_key, section_title)
+        return ('rebuild', options, focus_pos)
 
     def _onHubMoveCallback(self, action, mli, old_pos, new_pos):
         """Handle move mode callbacks from the dropdown dialog.

@@ -366,6 +366,16 @@ class DropdownDialog(kodigui.BaseDialog):
                 self.choice = {'reopen': True}
                 self.doClose()
                 return
+            # Check if callback wants to rebuild the list in place
+            elif isinstance(result, tuple) and result[0] == 'rebuild':
+                _, new_options, focus_pos = result
+                self.options = new_options
+                prev_select_index = self.selectIndex
+                self.selectIndex = focus_pos
+                self.selectItem = None
+                self.showOptions()
+                self.selectIndex = prev_select_index
+                return
 
         del mli
 
