@@ -1160,6 +1160,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         # Helper to create option entry
         def make_option(catalog_id, hub_info, is_enabled, position=None):
             base_title = hub_info.get('title', catalog_id)
+            if 'collection' in hub_info.get('identifier', ''):
+                base_title = u'{} (Collection)'.format(base_title)
             source_label = hub_info.get('source_section_title', 'Unknown')
             if position is not None:
                 display_title = u'{}. {} [{}]'.format(position, base_title, source_label)
