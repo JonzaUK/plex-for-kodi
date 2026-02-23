@@ -1434,11 +1434,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
             elif sub.get('key') == 'disable':
                 self._disableHub(catalog_id, section_key)
-                choice['enabled'] = False
-                mli.setProperty('indicator', '')
-                mli.setThumbnailImage('')
-                self._refreshHubSettingsDialog(optionsList, section_key)
                 self._hubsSettingsChanged = True
+                self._reopenSelectCatalogId = catalog_id
+                return 'close_and_reopen'
 
             return None  # Stay open
         else:

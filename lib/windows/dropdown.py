@@ -319,7 +319,7 @@ class DropdownDialog(kodigui.BaseDialog):
             return
 
         if self.suboptionCallback:
-            options = self.suboptionCallback(choice)
+            options = self.suboptionCallback(mli.dataSource)
             if options:
                 sub_select = None
                 if self.selectItem and self.selectItem.get("sub"):
