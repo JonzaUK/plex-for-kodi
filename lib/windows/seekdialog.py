@@ -132,6 +132,7 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
     BIG_SEEK_LIST_ID = 501
 
     SKIP_MARKER_BUTTON_ID = 791
+    PLAY_NEXT_BUTTON_ID = 792
     NO_OSD_BUTTON_ID = 800
 
     BAR_X = 0
@@ -236,9 +237,10 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         # this is duplicated in onFirstInit; we need to do this to get the early player skip right, as we might be
         # an initialized instance already, but not yet a window, but the player needs to access these values
         button_settings = util.getUserSetting('player_show_buttons',
-                                              ['subtitle_downloads', 'skip_intro', 'skip_credits'])
+                                              ['subtitle_downloads', 'skip_intro', 'skip_credits', 'play_next'])
         self.showSkipIntro = 'skip_intro' in button_settings
         self.showSkipCredits = 'skip_credits' in button_settings
+        self.showPlayNextButton = 'play_next' in button_settings
         self.bingeMode = False
         self.autoSkipIntro = False
         self.autoSkipCredits = False
@@ -444,7 +446,7 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         self.bigSeekGroupControl = self.getControl(self.BIG_SEEK_GROUP_ID)
         self.initialized = True
 
-        button_defaults = ['subtitle_downloads', 'skip_intro', 'skip_credits'] + \
+        button_defaults = ['subtitle_downloads', 'skip_intro', 'skip_credits', 'play_next'] + \
             (['video_show_vs10'] if util.CE_VS10 else [])
         button_settings = util.getUserSetting('player_show_buttons', button_defaults)
         showQuickSubs = 'subtitle_downloads' in button_settings
@@ -453,6 +455,7 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         showShuffle = 'video_show_shuffle' in button_settings
         self.showSkipIntro = 'skip_intro' in button_settings
         self.showSkipCredits = 'skip_credits' in button_settings
+        self.showPlayNextButton = 'play_next' in button_settings
         self.setBoolProperty('nav.quick_subtitles', showQuickSubs)
         self.setBoolProperty('nav.repeat', showRepeat)
         self.setBoolProperty('nav.ffwdrwd', showFfwdRwd)
@@ -688,8 +691,14 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
                         self.showOSD()
                     elif action in (xbmcgui.ACTION_MOVE_RIGHT, xbmcgui.ACTION_STEP_FORWARD, xbmcgui.ACTION_MOVE_LEFT,
                                     xbmcgui.ACTION_STEP_BACK):
-                        # allow no-OSD-seeking with intro skip button shown
-                        passThroughMain = True
+                        # allow no-OSD-seeking with intro skip button shown,
+                        # but if Play Next is visible, navigate between the two buttons instead of seeking
+                        if self.getProperty('show.playNext'):
+                            if action in (xbmcgui.ACTION_MOVE_RIGHT, xbmcgui.ACTION_STEP_FORWARD):
+                                self.setFocusId(self.PLAY_NEXT_BUTTON_ID)
+                            # left/step-back: stay on 791, don't seek
+                        else:
+                            passThroughMain = True
                     elif action == xbmcgui.ACTION_MOVE_UP and self.osdVisible() and self.showChapters:
                         self.setProperty('show.chapters', '1')
                         self.setFocusId(self.BIG_SEEK_LIST_ID)
@@ -702,6 +711,22 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
                             if markerDef:
                                 markerDef["hidden"] = True
                             return
+
+                if controlID == self.PLAY_NEXT_BUTTON_ID:
+                    if action == xbmcgui.ACTION_SELECT_ITEM:
+                        self.playNextFromCredits()
+                        return
+                    elif action in (xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_STEP_BACK):
+                        self.setFocusId(self.SKIP_MARKER_BUTTON_ID)
+                        return
+                    elif action in (xbmcgui.ACTION_MOVE_RIGHT, xbmcgui.ACTION_STEP_FORWARD):
+                        return  # rightmost button, prevent focus escaping to seek controls
+                    elif action == xbmcgui.ACTION_MOVE_UP:
+                        return  # prevent focus escaping upward into seek controls
+                    elif action == xbmcgui.ACTION_MOVE_DOWN:
+                        self.setProperty('show.markerSkip_OSDOnly', '1')
+                        self.showOSD()
+                        return
 
                 if controlID == self.MAIN_BUTTON_ID:
                     # we're seeking from the timeline with the OSD open - do an actual timeline seek
@@ -2420,6 +2445,19 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
             self.stop()
         return False
 
+    def playNextFromCredits(self):
+        """Play Next button handler: mark current episode watched and go straight to next."""
+        if not self.handler.playlist or not self.handler.playlist.hasNext():
+            return
+        self.setProperty('show.markerSkip', '')
+        self.setProperty('show.markerSkip_OSDOnly', '')
+        self.setProperty('show.playNext', '')
+        self.sendTimeline(state=self.player.STATE_STOPPED, t=self.duration - 1000)
+        if not self.handler.queuingNext:
+            self.handler.skipPostPlay = True  # bypass post-play screen, go directly to next episode
+            self.prepareNewPlayback(queuing_next=True, ignore_tick=True, ignore_input=True, with_timeline=False)
+            self.player.stop()
+
     def sendTimeline(self, state=None, t=None, ensureFinalTimelineEvent=True):
         self.handler.updateNowPlaying(state=state, t=t, overrideChecks=True)
         if ensureFinalTimelineEvent:
@@ -2447,6 +2485,18 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
             # no marker to display, hide it
             self.setProperty('show.markerSkip', '')
             self.setProperty('show.markerSkip_OSDOnly', '')
+
+            # 90% fallback: only for content with no credits markers at all (e.g. untagged content)
+            # if credits markers exist, let them handle it — don't show early at 90%
+            hasCreditsMarker = self.markers and any(m["marker_type"] == "credits" for m in self.markers)
+            hasNext = bool(self.handler.playlist and self.handler.playlist.hasNext())
+            atNinetyPct = self.duration and self.offset and (self.offset / self.duration) >= 0.90
+            showPlayNext = self.showPlayNextButton and not hasCreditsMarker and hasNext and atNinetyPct
+            self.setBoolProperty('show.playNext', showPlayNext)
+
+            # snap focus to Play Next button when it appears (no Skip Credits button in this path)
+            if showPlayNext and not self.osdVisible() and self.lastFocusID != self.PLAY_NEXT_BUTTON_ID:
+                self.setFocusId(self.PLAY_NEXT_BUTTON_ID)
 
             # this might be counter intuitive, but self._currentMarker is a reference to a dict
             if self._currentMarker:
@@ -2545,6 +2595,11 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         else:
             self.setProperty('show.markerSkip_OSDOnly', '1')
 
+        # show Play Next button when credits are showing and there is a next episode
+        hasNext = bool(self.handler.playlist and self.handler.playlist.hasNext())
+        isCredits = markerDef["marker_type"] == "credits"
+        self.setBoolProperty('show.playNext', self.showPlayNextButton and isCredits and hasNext)
+
         # set marker name, count down
         if markerAutoSkip and not markerAutoSkipped:
             isNew = False
@@ -2583,7 +2638,7 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         self._currentMarker = markerDef
 
         # focus marker if OSD is hidden, last focus wasn't the marker button and we're not auto skipping this marker
-        if not self.osdVisible() and self.lastFocusID != self.SKIP_MARKER_BUTTON_ID and \
+        if not self.osdVisible() and self.lastFocusID not in (self.SKIP_MARKER_BUTTON_ID, self.PLAY_NEXT_BUTTON_ID) and \
                 not self.getProperty('show.markerSkip_OSDOnly') and self.getProperty('show.markerSkip') \
                 and not markerAutoSkip:
             self.setFocusId(self.SKIP_MARKER_BUTTON_ID)
@@ -2708,6 +2763,8 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         if not skipMarkerFocus and not self.getProperty('show.markerSkip_OSDOnly') \
                 and self.getProperty('show.markerSkip'):
             self.setFocusId(self.SKIP_MARKER_BUTTON_ID)
+        elif not skipMarkerFocus and self.getProperty('show.playNext'):
+            self.setFocusId(self.PLAY_NEXT_BUTTON_ID)
 
         self.resetSeeking()
         self._osdHideAnimationTimeout = time.time() + self.OSD_HIDE_ANIMATION_DURATION

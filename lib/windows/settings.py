@@ -828,7 +828,7 @@ class Settings(object):
                     T(33005, '')),
                 MultiUAOptionsSetting(
                     'player_show_buttons', T(33057, 'Show buttons'),
-                    ['subtitle_downloads', 'skip_intro', 'skip_credits'] + (['video_show_vs10'] if util.CE_VS10 else []),
+                    ['subtitle_downloads', 'skip_intro', 'skip_credits', 'play_next'] + (['video_show_vs10'] if util.CE_VS10 else []),
                     (
                         ('subtitle_downloads', T(32932, 'Show subtitle quick-actions button')),
                         ('video_show_ffwdrwd', T(32933, 'Show FFWD/RWD buttons')),
@@ -836,6 +836,7 @@ class Settings(object):
                         ('video_show_shuffle', T(32935, 'Show shuffle button')),
                         ('skip_intro', T(32495, 'Skip Intro')),
                         ('skip_credits', T(32496, 'Skip Credits')),
+                        ('play_next', T(34100, 'Play Next')),
                     ) + (
                         (('video_show_vs10', T(34090, 'VS10 Mode')),) if util.CE_VS10 else ()
                     )

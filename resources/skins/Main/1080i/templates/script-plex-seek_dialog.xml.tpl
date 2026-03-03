@@ -1147,5 +1147,24 @@
         <focusedcolor>FF000000</focusedcolor>
         <label>$INFO[Window.Property(skipMarkerName)]</label>
     </control>
+    <control type="button" id="792">
+        <visible>[!String.IsEmpty(Window.Property(show.playNext)) + String.IsEmpty(Window.Property(show.markerSkip_OSDOnly))] | [!String.IsEmpty(Window.Property(show.playNext)) + !String.IsEmpty(Window.Property(show.markerSkip_OSDOnly)) + !String.IsEmpty(Window.Property(show.OSD))]</visible>
+        <animation effect="zoom" start="100" end="110,120" time="100" center="auto" reversible="false">Focus</animation>
+        <animation effect="zoom" start="110,120" end="100" time="100" center="auto" reversible="false">UnFocus</animation>
+        <animation type="Conditional" condition="String.IsEmpty(Window.Property(show.OSD)) + !Window.IsVisible(seekbar)" reversible="false">
+            <effect type="slide" end="0,100" time="100" delay="100"></effect>
+        </animation>
+        <width min="200">auto</width>
+        <height>{{ vscale(143, up=1.1) }}</height>
+        <align>center</align>
+        <right>0</right>
+        <top>0</top>
+        <texturefocus colordiffuse="FFE5A00D" border="50">script.plex/buttons/blank-focus.png</texturefocus>
+        <texturenofocus colordiffuse="99FFFFFF" border="50">script.plex/buttons/blank.png</texturenofocus>
+        <textoffsetx>70</textoffsetx>
+        <textcolor>FF000000</textcolor>
+        <focusedcolor>FF000000</focusedcolor>
+        <label>$ADDON[script.plexmod 32325]</label>
+    </control>
 </control>
 {% endblock controls %}
