@@ -568,7 +568,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         'season': 'poster',
     }
 
-    THUMB_POSTER_DIM = util.scaleResolution(244, 361)
+    THUMB_POSTER_DIM = util.scaleResolution(300, 444)
     THUMB_AR16X9_DIM = util.scaleResolution(532, 299)
     THUMB_SQUARE_DIM = util.scaleResolution(244, 244)
 

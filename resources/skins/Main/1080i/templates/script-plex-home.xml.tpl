@@ -6,13 +6,13 @@
     <!-- Dynamic focus animations for hub rows -->
     <!-- First hub (500) slides up less since it's after the section bar -->
     <animation type="Conditional" condition="Integer.IsGreater(Window.Property(hub.focus),0) + Control.IsVisible(500)" reversible="true">
-        <effect type="slide" end="0,{{ vscale(-345) }}" time="200" tween="sine" easing="inout"/>
+        <effect type="slide" end="0,{{ vscale(-428) }}" time="200" tween="sine" easing="inout"/>
     </animation>
 
     <!-- Subsequent hubs use consistent slide distance -->
     {% for i in range(1, core.hub_count) %}
     <animation type="Conditional" condition="Integer.IsGreater(Window.Property(hub.focus),{{ i }}) + Control.IsVisible({{ i + 499 }})" reversible="true">
-        <effect type="slide" end="0,{{ vscale(-555) }}" time="200" tween="sine" easing="inout"/>
+        <effect type="slide" end="0,{{ vscale(-638) }}" time="200" tween="sine" easing="inout"/>
     </animation>
     {% endfor %}
 
@@ -20,7 +20,7 @@
     <posx>0</posx>
     <posy>{{ vscale(96) }}</posy>
     <width>2130</width>
-    {% with n = core.hub_count %}{% with grouplist_height = n * 555 + 320 %}
+    {% with n = core.hub_count %}{% with grouplist_height = n * 638 + 320 %}
     <height>{{ vscale(grouplist_height) }}</height>
     {% endwith %}{% endwith %}
     <itemgap>20</itemgap>
@@ -248,7 +248,7 @@
         <visible>Integer.IsGreater(Container({{ hub_id }}).NumItems,0) + String.IsEmpty(Window.Property(drawing))</visible>
         <defaultcontrol>{{ hub_id }}</defaultcontrol>
         <width>1920</width>
-        <height>{{ vscale(535) }}</height>
+        <height>{{ vscale(618) }}</height>
         <control type="image">
             <visible>!String.IsEmpty(Window.Property(bifurcation_lines))</visible>
             <posx>60</posx>
@@ -273,7 +273,7 @@
             <posx>0</posx>
             <posy>{{ vscale(29) }}</posy>
             <width>1920</width>
-            <height>{{ vscale(515) }}</height>
+            <height>{{ vscale(598) }}</height>
             <onup>{% if loop.is_first %}101{% else %}{{ hub_id - 1 }}{% endif %}</onup>
             <ondown>{% if loop.is_last %}{{ hub_id }}{% else %}{{ hub_id + 1 }}{% endif %}</ondown>
             <onright>noop</onright>
