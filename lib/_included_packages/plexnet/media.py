@@ -520,6 +520,104 @@ class Role(MediaTag):
 
         return items
 
+    def getDiscoverCredits(self, credit_type='actor'):
+        """
+        Fetch full filmography from Plex's discover API (not just local library).
+        Returns credits from the entire Plex catalog for this actor.
+
+        Args:
+            credit_type: 'actor', 'director', 'producer' — which credit group to return
+
+        Returns:
+            list of credit dicts, each with keys: 'role', 'order', and 'Metadata' dict
+            containing 'title', 'year', 'type', 'ratingKey', 'thumb', 'art', etc.
+            Returns empty list if tagKey is not available or request fails.
+        """
+        tag_key = getattr(self, 'tagKey', None)
+        if not tag_key:
+            util.DEBUG_LOG('getDiscoverCredits: No tagKey available for {0}'.format(self.tag))
+            return []
+
+        try:
+            from . import plexapp
+            account = plexapp.ACCOUNT
+            if not account or not account.authToken:
+                util.DEBUG_LOG('getDiscoverCredits: No auth token available')
+                return []
+
+            import requests
+            url = 'https://discover.provider.plex.tv/library/people/{0}/credits'.format(tag_key)
+            headers = {
+                'X-Plex-Token': account.authToken,
+                'Accept': 'application/json'
+            }
+
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                util.DEBUG_LOG('getDiscoverCredits: Status {0} for {1}'.format(response.status_code, self.tag))
+                return []
+
+            data = response.json()
+            container = data.get('MediaContainer', {})
+            credit_groups = container.get('CreditGroup', [])
+
+            for group in credit_groups:
+                if group.get('type', '').lower() == credit_type.lower():
+                    credits = group.get('Credit', [])
+                    util.DEBUG_LOG('getDiscoverCredits: Found {0} {1} credits for {2}'.format(
+                        len(credits), credit_type, self.tag))
+                    return credits
+
+            util.DEBUG_LOG('getDiscoverCredits: No "{0}" credit group found for {1}'.format(
+                credit_type, self.tag))
+            return []
+
+        except Exception as e:
+            util.DEBUG_LOG('getDiscoverCredits: Failed for {0}: {1}'.format(self.tag, e))
+            return []
+
+    @staticmethod
+    def checkLibraryPresence(server, guids):
+        """
+        Batch-check which plex GUIDs exist in the user's library.
+
+        Args:
+            server: PlexServer instance to query
+            guids: list of plex GUIDs (e.g. ['plex://movie/5d7769d0...', ...])
+
+        Returns:
+            set of GUIDs that ARE in the library
+        """
+        from .compat import quote_plus
+
+        present = set()
+        # Batch in groups of 10 (matching Plex Web's behaviour)
+        batch_size = 10
+        for i in range(0, len(guids), batch_size):
+            batch = guids[i:i + batch_size]
+            # URL-encode each GUID and join with commas
+            encoded = ','.join(quote_plus(g) for g in batch)
+            path = '/library/metadata/{0}'.format(encoded)
+            try:
+                data = server.query(path)
+                if data is not None:
+                    # 200 response — all items in this batch are in the library
+                    # Extract the GUIDs from the response to be precise
+                    for elem in data:
+                        guid = elem.get('guid', '')
+                        if guid:
+                            present.add(guid)
+                    # If no guid attributes in response, assume all batch GUIDs are present
+                    if not present.intersection(set(batch)):
+                        present.update(batch)
+            except Exception:
+                # 404 or error — none of these items are in the library
+                pass
+
+        util.DEBUG_LOG('checkLibraryPresence: {0}/{1} GUIDs found in library'.format(
+            len(present), len(guids)))
+        return present
+
 
 class Similar(MediaTag):
     TYPE = 'Similar'

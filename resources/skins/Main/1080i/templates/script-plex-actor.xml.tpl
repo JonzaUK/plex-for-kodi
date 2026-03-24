@@ -25,6 +25,8 @@
 <control type="group" id="50">
     <posx>0</posx>
     <posy>0</posy>
+    <!-- Slide up when Not in Library list gets focus -->
+    <animation effect="slide" start="0,0" end="0,{{ vscale(-540) }}" time="300" tween="quadratic" easing="out" condition="Control.HasFocus(401)">Conditional</animation>
 
     <!-- Actor Details Section -->
     <control type="group">
@@ -135,26 +137,6 @@
         </control>
     </control>
 
-    <!-- Filmography Section Header -->
-    <control type="group">
-        <posx>60</posx>
-        <posy>{{ vscale(460) }}</posy>
-        <width>1800</width>
-        <height>{{ vscale(60) }}</height>
-
-        <control type="label">
-            <posx>0</posx>
-            <posy>0</posy>
-            <width>600</width>
-            <height>{{ vscale(60) }}</height>
-            <font>font13</font>
-            <align>left</align>
-            <aligny>center</aligny>
-            <textcolor>FFFFFFFF</textcolor>
-            <label>[UPPERCASE]$ADDON[script.plexmod 32476][/UPPERCASE]</label>
-        </control>
-    </control>
-
     <!-- Loading Indicator -->
     <control type="group">
         <visible>!String.IsEmpty(Window.Property(loading))</visible>
@@ -173,165 +155,297 @@
     <control type="group" id="500">
         <visible>String.IsEmpty(Window.Property(loading))</visible>
         <posx>0</posx>
-        <posy>{{ vscale(500) }}</posy>
+        <posy>{{ vscale(460) }}</posy>
         <width>1920</width>
-        <height>{{ vscale(540) }}</height>
+        <height>{{ vscale(535) }}</height>
 
+        <control type="label">
+            <posx>60</posx>
+            <posy>0</posy>
+            <width>1000</width>
+            <height>{{ vscale(87) }}</height>
+            <font>font12</font>
+            <align>left</align>
+            <aligny>center</aligny>
+            <textcolor>FFFFFFFF</textcolor>
+            <label>[UPPERCASE]$ADDON[script.plexmod 32476][/UPPERCASE]</label>
+        </control>
         <control type="list" id="400">
             <posx>0</posx>
-            <posy>{{ vscale(20) }}</posy>
+            <posy>{{ vscale(29) }}</posy>
             <width>1920</width>
-            <height>{{ vscale(520) }}</height>
+            <height>{{ vscale(515) }}</height>
             <onup>201</onup>
+            <ondown>401</ondown>
             <scrolltime>200</scrolltime>
             <orientation>horizontal</orientation>
             <preloaditems>4</preloaditems>
 
             <!-- Item Layout -->
-            <itemlayout width="288" height="{{ vscale(500) }}">
+            <itemlayout width="287" height="{{ vscale(480) }}">
                 <control type="group">
-                    <posx>60</posx>
-                    <posy>{{ vscale(30) }}</posy>
-
-                    <!-- Poster -->
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>268</width>
-                        <height>{{ vscale(402) }}</height>
-                        <texture>script.plex/thumb_fallbacks/movie.png</texture>
-                        <aspectratio>scale</aspectratio>
-                    </control>
-                    <control type="image">
-                        <posx>0</posx>
-                        <posy>0</posy>
-                        <width>268</width>
-                        <height>{{ vscale(402) }}</height>
-                        <texture background="true">$INFO[ListItem.Thumb]</texture>
-                        <aspectratio>scale</aspectratio>
-                    </control>
-
-                    <!-- Title -->
-                    <control type="label">
-                        <scroll>false</scroll>
-                        <posx>0</posx>
-                        <posy>{{ vscale(410) }}</posy>
-                        <width>268</width>
-                        <height>{{ vscale(30) }}</height>
-                        <font>font10</font>
-                        <align>center</align>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                    </control>
-
-                    <!-- Year -->
-                    <control type="label">
-                        <scroll>false</scroll>
-                        <posx>0</posx>
-                        <posy>{{ vscale(435) }}</posy>
-                        <width>268</width>
-                        <height>{{ vscale(25) }}</height>
-                        <font>font10</font>
-                        <align>center</align>
-                        <textcolor>99FFFFFF</textcolor>
-                        <label>$INFO[ListItem.Label2]</label>
-                    </control>
-
-                    <!-- Watched indicator -->
-                    <control type="image">
-                        <visible>!String.IsEmpty(ListItem.Property(watched))</visible>
-                        <posx>230</posx>
-                        <posy>8</posy>
-                        <width>30</width>
-                        <height>{{ vscale(30) }}</height>
-                        <texture>script.plex/indicators/watched-indicator.png</texture>
+                    <posx>55</posx>
+                    <posy>{{ vscale(72) }}</posy>
+                    <control type="group">
+                        <posx>5</posx>
+                        <posy>5</posy>
+                        <control type="image">
+                            <posx>0</posx>
+                            <posy>0</posy>
+                            <width>244</width>
+                            <height>{{ vscale(361) }}</height>
+                            <texture>$INFO[ListItem.Property(thumb.fallback)]</texture>
+                        </control>
+                        <control type="image">
+                            <posx>0</posx>
+                            <posy>0</posy>
+                            <width>244</width>
+                            <height>{{ vscale(361) }}</height>
+                            <texture background="true">$INFO[ListItem.Thumb]</texture>
+                            <aspectratio>scale</aspectratio>
+                        </control>
+                        <control type="label">
+                            <scroll>false</scroll>
+                            <posx>0</posx>
+                            <posy>{{ vscale(371) }}</posy>
+                            <width>244</width>
+                            <height>{{ vscale(35) }}</height>
+                            <font>font10</font>
+                            <align>center</align>
+                            <textcolor>FFFFFFFF</textcolor>
+                            <label>$INFO[ListItem.Label]</label>
+                        </control>
+                        <control type="label">
+                            <scroll>false</scroll>
+                            <posx>0</posx>
+                            <posy>{{ vscale(398) }}</posy>
+                            <width>244</width>
+                            <height>{{ vscale(35) }}</height>
+                            <font>font10</font>
+                            <align>center</align>
+                            <textcolor>99FFFFFF</textcolor>
+                            <label>$INFO[ListItem.Label2]</label>
+                        </control>
+                        {% include "includes/watched_indicator.xml.tpl" with xoff=244 & uw_size=48 & with_count=True & scale="medium" %}
                     </control>
                 </control>
             </itemlayout>
 
             <!-- Focused Layout -->
-            <focusedlayout width="288" height="{{ vscale(500) }}">
+            <focusedlayout width="287" height="{{ vscale(480) }}">
                 <control type="group">
-                    <posx>60</posx>
-                    <posy>{{ vscale(30) }}</posy>
-
+                    <posx>55</posx>
+                    <posy>{{ vscale(72) }}</posy>
                     <control type="group">
-                        <animation effect="zoom" start="100" end="105" time="100" center="134,{{ vscale(201) }}" reversible="false">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" time="100" center="134,{{ vscale(201) }}" reversible="false">UnFocus</animation>
-
-                        <!-- Poster Shadow -->
+                        <animation effect="zoom" start="100" end="110" time="100" center="127,{{ vscale(180.5) }}" reversible="false">Focus</animation>
+                        <animation effect="zoom" start="110" end="100" time="100" center="127,{{ vscale(180.5) }}" reversible="false">UnFocus</animation>
                         <control type="image">
                             <visible>Control.HasFocus(400)</visible>
-                            <posx>-12</posx>
-                            <posy>{{ vscale(-12) }}</posy>
-                            <width>292</width>
-                            <height>{{ vscale(426) }}</height>
+                            <posx>-40</posx>
+                            <posy>{{ vscale(-40) }}</posy>
+                            <width>334</width>
+                            <height>{{ vscale(451) }}</height>
                             <texture border="42">script.plex/drop-shadow.png</texture>
                         </control>
+                        <control type="group">
+                            <posx>5</posx>
+                            <posy>5</posy>
+                            <control type="image">
+                                <posx>0</posx>
+                                <posy>0</posy>
+                                <width>244</width>
+                                <height>{{ vscale(361) }}</height>
+                                <texture>$INFO[ListItem.Property(thumb.fallback)]</texture>
+                            </control>
+                            <control type="image">
+                                <posx>0</posx>
+                                <posy>0</posy>
+                                <width>244</width>
+                                <height>{{ vscale(361) }}</height>
+                                <texture background="true">$INFO[ListItem.Thumb]</texture>
+                                <aspectratio>scale</aspectratio>
+                            </control>
+                            <control type="label">
+                                <scroll>Control.HasFocus(400)</scroll>
+                                <posx>0</posx>
+                                <posy>{{ vscale(371) }}</posy>
+                                <width>244</width>
+                                <height>{{ vscale(35) }}</height>
+                                <font>font10</font>
+                                <align>center</align>
+                                <textcolor>FFFFFFFF</textcolor>
+                                <label>$INFO[ListItem.Label]</label>
+                            </control>
+                            <control type="label">
+                                <scroll>false</scroll>
+                                <posx>0</posx>
+                                <posy>{{ vscale(398) }}</posy>
+                                <width>244</width>
+                                <height>{{ vscale(35) }}</height>
+                                <font>font10</font>
+                                <align>center</align>
+                                <textcolor>99FFFFFF</textcolor>
+                                <label>$INFO[ListItem.Label2]</label>
+                            </control>
+                            {% include "includes/watched_indicator.xml.tpl" with xoff=244 & uw_size=48 & with_count=True & scale="medium" %}
+                        </control>
+                        <control type="image">
+                            <visible>Control.HasFocus(400)</visible>
+                            <posx>0</posx>
+                            <posy>0</posy>
+                            <width>254</width>
+                            <height>{{ vscale(371) }}</height>
+                            <texture border="10">script.plex/home/selected.png</texture>
+                        </control>
+                    </control>
+                </control>
+            </focusedlayout>
+        </control>
+    </control>
 
-                        <!-- Poster -->
+    <!-- Not in Library Section -->
+    <control type="group" id="501">
+        <visible>Integer.IsGreater(Container(401).NumItems,0)</visible>
+        <posx>0</posx>
+        <posy>{{ vscale(1000) }}</posy>
+        <width>1920</width>
+        <height>{{ vscale(535) }}</height>
+
+        <control type="label">
+            <posx>60</posx>
+            <posy>0</posy>
+            <width>1000</width>
+            <height>{{ vscale(87) }}</height>
+            <font>font12</font>
+            <align>left</align>
+            <aligny>center</aligny>
+            <textcolor>FFFFFFFF</textcolor>
+            <label>[UPPERCASE]$ADDON[script.plexmod 32479][/UPPERCASE]</label>
+        </control>
+        <control type="list" id="401">
+            <posx>0</posx>
+            <posy>{{ vscale(29) }}</posy>
+            <width>1920</width>
+            <height>{{ vscale(515) }}</height>
+            <onup>400</onup>
+            <scrolltime>200</scrolltime>
+            <orientation>horizontal</orientation>
+            <preloaditems>4</preloaditems>
+
+            <!-- Item Layout -->
+            <itemlayout width="287" height="{{ vscale(480) }}">
+                <control type="group">
+                    <posx>55</posx>
+                    <posy>{{ vscale(72) }}</posy>
+                    <control type="group">
+                        <posx>5</posx>
+                        <posy>5</posy>
                         <control type="image">
                             <posx>0</posx>
                             <posy>0</posy>
-                            <width>268</width>
-                            <height>{{ vscale(402) }}</height>
-                            <texture>script.plex/thumb_fallbacks/movie.png</texture>
-                            <aspectratio>scale</aspectratio>
+                            <width>244</width>
+                            <height>{{ vscale(361) }}</height>
+                            <texture>$INFO[ListItem.Property(thumb.fallback)]</texture>
                         </control>
                         <control type="image">
                             <posx>0</posx>
                             <posy>0</posy>
-                            <width>268</width>
-                            <height>{{ vscale(402) }}</height>
+                            <width>244</width>
+                            <height>{{ vscale(361) }}</height>
                             <texture background="true">$INFO[ListItem.Thumb]</texture>
                             <aspectratio>scale</aspectratio>
                         </control>
+                        <control type="label">
+                            <scroll>false</scroll>
+                            <posx>0</posx>
+                            <posy>{{ vscale(371) }}</posy>
+                            <width>244</width>
+                            <height>{{ vscale(35) }}</height>
+                            <font>font10</font>
+                            <align>center</align>
+                            <textcolor>FFFFFFFF</textcolor>
+                            <label>$INFO[ListItem.Label]</label>
+                        </control>
+                        <control type="label">
+                            <scroll>false</scroll>
+                            <posx>0</posx>
+                            <posy>{{ vscale(398) }}</posy>
+                            <width>244</width>
+                            <height>{{ vscale(35) }}</height>
+                            <font>font10</font>
+                            <align>center</align>
+                            <textcolor>99FFFFFF</textcolor>
+                            <label>$INFO[ListItem.Label2]</label>
+                        </control>
+                    </control>
+                </control>
+            </itemlayout>
 
-                        <!-- Selection Indicator -->
+            <!-- Focused Layout -->
+            <focusedlayout width="287" height="{{ vscale(480) }}">
+                <control type="group">
+                    <posx>55</posx>
+                    <posy>{{ vscale(72) }}</posy>
+                    <control type="group">
+                        <animation effect="zoom" start="100" end="110" time="100" center="127,{{ vscale(180.5) }}" reversible="false">Focus</animation>
+                        <animation effect="zoom" start="110" end="100" time="100" center="127,{{ vscale(180.5) }}" reversible="false">UnFocus</animation>
                         <control type="image">
-                            <visible>Control.HasFocus(400)</visible>
-                            <posx>-4</posx>
-                            <posy>{{ vscale(-4) }}</posy>
-                            <width>276</width>
-                            <height>{{ vscale(410) }}</height>
+                            <visible>Control.HasFocus(401)</visible>
+                            <posx>-40</posx>
+                            <posy>{{ vscale(-40) }}</posy>
+                            <width>334</width>
+                            <height>{{ vscale(451) }}</height>
+                            <texture border="42">script.plex/drop-shadow.png</texture>
+                        </control>
+                        <control type="group">
+                            <posx>5</posx>
+                            <posy>5</posy>
+                            <control type="image">
+                                <posx>0</posx>
+                                <posy>0</posy>
+                                <width>244</width>
+                                <height>{{ vscale(361) }}</height>
+                                <texture>$INFO[ListItem.Property(thumb.fallback)]</texture>
+                            </control>
+                            <control type="image">
+                                <posx>0</posx>
+                                <posy>0</posy>
+                                <width>244</width>
+                                <height>{{ vscale(361) }}</height>
+                                <texture background="true">$INFO[ListItem.Thumb]</texture>
+                                <aspectratio>scale</aspectratio>
+                            </control>
+                            <control type="label">
+                                <scroll>Control.HasFocus(401)</scroll>
+                                <posx>0</posx>
+                                <posy>{{ vscale(371) }}</posy>
+                                <width>244</width>
+                                <height>{{ vscale(35) }}</height>
+                                <font>font10</font>
+                                <align>center</align>
+                                <textcolor>FFFFFFFF</textcolor>
+                                <label>$INFO[ListItem.Label]</label>
+                            </control>
+                            <control type="label">
+                                <scroll>false</scroll>
+                                <posx>0</posx>
+                                <posy>{{ vscale(398) }}</posy>
+                                <width>244</width>
+                                <height>{{ vscale(35) }}</height>
+                                <font>font10</font>
+                                <align>center</align>
+                                <textcolor>99FFFFFF</textcolor>
+                                <label>$INFO[ListItem.Label2]</label>
+                            </control>
+                        </control>
+                        <control type="image">
+                            <visible>Control.HasFocus(401)</visible>
+                            <posx>0</posx>
+                            <posy>0</posy>
+                            <width>254</width>
+                            <height>{{ vscale(371) }}</height>
                             <texture border="10">script.plex/home/selected.png</texture>
                         </control>
-
-                        <!-- Watched indicator -->
-                        <control type="image">
-                            <visible>!String.IsEmpty(ListItem.Property(watched))</visible>
-                            <posx>230</posx>
-                            <posy>8</posy>
-                            <width>30</width>
-                            <height>{{ vscale(30) }}</height>
-                            <texture>script.plex/indicators/watched-indicator.png</texture>
-                        </control>
-                    </control>
-
-                    <!-- Title -->
-                    <control type="label">
-                        <scroll>Control.HasFocus(400)</scroll>
-                        <posx>0</posx>
-                        <posy>{{ vscale(410) }}</posy>
-                        <width>268</width>
-                        <height>{{ vscale(30) }}</height>
-                        <font>font10</font>
-                        <align>center</align>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                    </control>
-
-                    <!-- Year -->
-                    <control type="label">
-                        <scroll>false</scroll>
-                        <posx>0</posx>
-                        <posy>{{ vscale(435) }}</posy>
-                        <width>268</width>
-                        <height>{{ vscale(25) }}</height>
-                        <font>font10</font>
-                        <align>center</align>
-                        <textcolor>99FFFFFF</textcolor>
-                        <label>$INFO[ListItem.Label2]</label>
                     </control>
                 </control>
             </focusedlayout>
