@@ -520,17 +520,18 @@ class Role(MediaTag):
 
         return items
 
-    def getDiscoverCredits(self, credit_type='actor'):
+    def getDiscoverCredits(self, credit_type=None):
         """
         Fetch full filmography from Plex's discover API (not just local library).
-        Returns credits from the entire Plex catalog for this actor.
 
         Args:
-            credit_type: 'actor', 'director', 'producer' — which credit group to return
+            credit_type: None to return all credit groups, or a string like
+                         'actor', 'director', 'producer' to filter to one group.
 
         Returns:
-            list of credit dicts, each with keys: 'role', 'order', and 'Metadata' dict
-            containing 'title', 'year', 'type', 'ratingKey', 'thumb', 'art', etc.
+            When credit_type is None: list of (type_name, credits) tuples for each
+            group the API returns, in API order.
+            When credit_type is set: flat list of credit dicts for that type only.
             Returns empty list if tagKey is not available or request fails.
         """
         tag_key = getattr(self, 'tagKey', None)
@@ -561,16 +562,26 @@ class Role(MediaTag):
             container = data.get('MediaContainer', {})
             credit_groups = container.get('CreditGroup', [])
 
-            for group in credit_groups:
-                if group.get('type', '').lower() == credit_type.lower():
-                    credits = group.get('Credit', [])
-                    util.DEBUG_LOG('getDiscoverCredits: Found {0} {1} credits for {2}'.format(
-                        len(credits), credit_type, self.tag))
-                    return credits
+            if credit_type is not None:
+                # Legacy single-type mode
+                for group in credit_groups:
+                    if group.get('type', '').lower() == credit_type.lower():
+                        credits = group.get('Credit', [])
+                        util.DEBUG_LOG('getDiscoverCredits: Found {0} {1} credits for {2}'.format(
+                            len(credits), credit_type, self.tag))
+                        return credits
+                return []
 
-            util.DEBUG_LOG('getDiscoverCredits: No "{0}" credit group found for {1}'.format(
-                credit_type, self.tag))
-            return []
+            # Return all groups as (type, credits) tuples
+            result = []
+            for group in credit_groups:
+                group_type = group.get('type', '')
+                credits = group.get('Credit', [])
+                if credits:
+                    result.append((group_type, credits))
+            util.DEBUG_LOG('getDiscoverCredits: Found {0} credit groups for {1}: {2}'.format(
+                len(result), self.tag, [r[0] for r in result]))
+            return result
 
         except Exception as e:
             util.DEBUG_LOG('getDiscoverCredits: Failed for {0}: {1}'.format(self.tag, e))

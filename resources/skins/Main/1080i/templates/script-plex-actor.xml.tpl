@@ -25,8 +25,14 @@
 <control type="group" id="50">
     <posx>0</posx>
     <posy>0</posy>
-    <!-- Slide up when Not in Library list gets focus -->
-    <animation effect="slide" start="0,0" end="0,{{ vscale(-540) }}" time="300" tween="quadratic" easing="out" condition="Control.HasFocus(401)">Conditional</animation>
+    <!-- Stacking slide animations for discover hub rows -->
+    {% for i in range(6) %}
+    {% with check_group = i + 501 %}
+    <animation type="Conditional" condition="Integer.IsGreater(Window.Property(hub.focus),{{ i }}) + Control.IsVisible({{ check_group }})" reversible="true">
+        <effect type="slide" end="0,{{ vscale(-540) }}" time="300" tween="quadratic" easing="out"/>
+    </animation>
+    {% endwith %}
+    {% endfor %}
 
     <!-- Actor Details Section -->
     <control type="group">
@@ -303,11 +309,13 @@
         </control>
     </control>
 
-    <!-- Not in Library Section -->
-    <control type="group" id="501">
-        <visible>Integer.IsGreater(Container(401).NumItems,0)</visible>
+    <!-- Discover Hub Slots (Not in Library - Actor, Director, etc.) -->
+    {% for i in range(6) %}
+    {% with list_id = i + 401 & group_id = i + 501 & posy_val = i * 540 + 1000 %}
+    <control type="group" id="{{ group_id }}">
+        <visible>Integer.IsGreater(Container({{ list_id }}).NumItems,0)</visible>
         <posx>0</posx>
-        <posy>{{ vscale(1000) }}</posy>
+        <posy>{{ vscale(posy_val) }}</posy>
         <width>1920</width>
         <height>{{ vscale(535) }}</height>
 
@@ -320,14 +328,15 @@
             <align>left</align>
             <aligny>center</aligny>
             <textcolor>FFFFFFFF</textcolor>
-            <label>[UPPERCASE]$ADDON[script.plexmod 32479][/UPPERCASE]</label>
+            <label>[UPPERCASE]$INFO[Window.Property(discover.hub.{{ i }}.label)][/UPPERCASE]</label>
         </control>
-        <control type="list" id="401">
+        <control type="list" id="{{ list_id }}">
             <posx>0</posx>
             <posy>{{ vscale(29) }}</posy>
             <width>1920</width>
             <height>{{ vscale(515) }}</height>
-            <onup>400</onup>
+            <onup>{% if loop.is_first %}400{% else %}{{ list_id - 1 }}{% endif %}</onup>
+            <ondown>{% if loop.is_last %}{{ list_id }}{% else %}{{ list_id + 1 }}{% endif %}</ondown>
             <scrolltime>200</scrolltime>
             <orientation>horizontal</orientation>
             <preloaditems>4</preloaditems>
@@ -390,7 +399,7 @@
                         <animation effect="zoom" start="100" end="110" time="100" center="127,{{ vscale(180.5) }}" reversible="false">Focus</animation>
                         <animation effect="zoom" start="110" end="100" time="100" center="127,{{ vscale(180.5) }}" reversible="false">UnFocus</animation>
                         <control type="image">
-                            <visible>Control.HasFocus(401)</visible>
+                            <visible>Control.HasFocus({{ list_id }})</visible>
                             <posx>-40</posx>
                             <posy>{{ vscale(-40) }}</posy>
                             <width>334</width>
@@ -416,7 +425,7 @@
                                 <aspectratio>scale</aspectratio>
                             </control>
                             <control type="label">
-                                <scroll>Control.HasFocus(401)</scroll>
+                                <scroll>Control.HasFocus({{ list_id }})</scroll>
                                 <posx>0</posx>
                                 <posy>{{ vscale(371) }}</posy>
                                 <width>244</width>
@@ -439,7 +448,7 @@
                             </control>
                         </control>
                         <control type="image">
-                            <visible>Control.HasFocus(401)</visible>
+                            <visible>Control.HasFocus({{ list_id }})</visible>
                             <posx>0</posx>
                             <posy>0</posy>
                             <width>254</width>
@@ -451,6 +460,8 @@
             </focusedlayout>
         </control>
     </control>
+    {% endwith %}
+    {% endfor %}
 
     <!-- Empty State -->
     <control type="group">

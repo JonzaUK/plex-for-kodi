@@ -23,8 +23,10 @@ from . import windowutils
 # Pagination settings
 FILMOGRAPHY_PAGE_SIZE = 10
 
-# Not in Library hub settings
+# Discover hub settings (Not in Library hubs - one per credit type)
+DISCOVER_HUB_SLOTS = 6  # Max number of discover hub rows
 NOT_IN_LIBRARY_BATCH_SIZE = 10  # GUIDs per library-check request (matches Plex Web)
+
 
 
 class ActorDetailsTask(backgroundthread.Task):
@@ -113,7 +115,8 @@ class DiscoverItem(object):
 
 class DiscoverCreditsTask(backgroundthread.Task):
     """Background task to fetch full filmography from Plex discover API,
-    then batch-check which items are in the user's library."""
+    then batch-check which items are in the user's library.
+    Returns all credit groups (actor, director, writer, etc.) with library presence info."""
 
     def __init__(self, role, server, callback):
         super(DiscoverCreditsTask, self).__init__()
@@ -125,31 +128,40 @@ class DiscoverCreditsTask(backgroundthread.Task):
         if self.isCanceled():
             return
 
-        # Step 1: Fetch all actor credits from discover
-        credits = self.role.getDiscoverCredits(credit_type='actor')
-        if self.isCanceled() or not credits:
-            self.callback([], set())
+        # Step 1: Fetch ALL credit groups from discover (actor, director, writer, etc.)
+        credit_groups = self.role.getDiscoverCredits(credit_type=None)
+        if self.isCanceled() or not credit_groups:
+            self.callback([], set(), set())
             return
 
-        # Step 2: Build DiscoverItems and collect GUIDs
-        discover_items = []
+        # Step 2: Build DiscoverItems for ALL groups, collect all GUIDs
+        discover_hubs = []  # [(type_name, [DiscoverItem, ...]), ...]
         all_guids = []
-        for credit in credits:
-            item = DiscoverItem(credit)
-            if item.ratingKey:
-                discover_items.append(item)
-                all_guids.append(item.guid)
+        actor_guids = set()
+
+        for group_type, credits in credit_groups:
+            group_items = []
+            for credit in credits:
+                item = DiscoverItem(credit)
+                if item.ratingKey:
+                    group_items.append(item)
+                    all_guids.append(item.guid)
+                    if group_type.lower() == 'actor':
+                        actor_guids.add(item.guid)
+            if group_items:
+                discover_hubs.append((group_type, group_items))
 
         if self.isCanceled():
-            self.callback([], set())
+            self.callback([], set(), set())
             return
 
-        # Step 3: Batch-check which GUIDs are in the local library
+        # Step 3: Batch-check which GUIDs are in the local library (deduplicated)
+        unique_guids = list(set(all_guids))
         from plexnet import media as plexmedia
-        library_guids = plexmedia.Role.checkLibraryPresence(self.server, all_guids)
+        library_guids = plexmedia.Role.checkLibraryPresence(self.server, unique_guids)
 
         if not self.isCanceled():
-            self.callback(discover_items, library_guids)
+            self.callback(discover_hubs, library_guids, actor_guids)
 
 
 class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
@@ -164,7 +176,8 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
     POSTER_DIM = util.scaleResolution(244, 361)
 
     FILMOGRAPHY_LIST_ID = 400
-    NOT_IN_LIBRARY_LIST_ID = 401
+    DISCOVER_LIST_BASE_ID = 401  # List IDs 401-406 for discover hubs
+    DISCOVER_GROUP_BASE_ID = 501  # Group IDs 501-506 for discover hubs
     HOME_BUTTON_ID = 201
     SEARCH_BUTTON_ID = 202
     PLAYER_STATUS_BUTTON_ID = 204
@@ -179,7 +192,7 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         self.filmographyOffset = 0
         self.filmographyTotalSize = 0
         self.filmographyMore = False
-        self.notInLibraryItems = []  # DiscoverItems not in user's library
+        self.discoverListControls = []  # ManagedControlList for each discover hub slot
         self.discoverActorGuids = set()  # GUIDs from discover actor credits (for filtering)
         self.libraryGuids = set()  # GUIDs confirmed in user's library
         self.tasks = backgroundthread.Tasks()
@@ -188,7 +201,16 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
 
     def onFirstInit(self):
         self.filmographyListControl = kodigui.ManagedControlList(self, self.FILMOGRAPHY_LIST_ID, 5)
-        self.notInLibraryListControl = kodigui.ManagedControlList(self, self.NOT_IN_LIBRARY_LIST_ID, 5)
+
+        # Create list controls for all discover hub slots (template generates 6)
+        self.discoverListControls = []
+        for i in range(DISCOVER_HUB_SLOTS):
+            list_id = self.DISCOVER_LIST_BASE_ID + i
+            try:
+                control = kodigui.ManagedControlList(self, list_id, 5)
+                self.discoverListControls.append(control)
+            except Exception:
+                break
 
         # Set initial info from role object
         self.setProperty('actor.name', self.role.tag or '')
@@ -217,11 +239,6 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
                 if self.checkFilmographyPagination(action):
                     return
 
-            # Context menu on Not in Library items
-            if controlID == self.NOT_IN_LIBRARY_LIST_ID:
-                if action == xbmcgui.ACTION_CONTEXT_MENU:
-                    self.notInLibraryItemClicked()
-                    return
         except Exception:
             util.ERROR()
 
@@ -251,9 +268,12 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             self.searchButtonClicked()
         elif controlID == self.PLAYER_STATUS_BUTTON_ID:
             self.showAudioPlayer()
+        elif self.DISCOVER_LIST_BASE_ID <= controlID < self.DISCOVER_LIST_BASE_ID + DISCOVER_HUB_SLOTS:
+            self.openDiscoverItem(controlID)
 
     def onFocus(self, controlID):
-        pass
+        if self.FILMOGRAPHY_LIST_ID <= controlID <= self.DISCOVER_LIST_BASE_ID + DISCOVER_HUB_SLOTS:
+            self.setProperty('hub.focus', str(controlID - self.FILMOGRAPHY_LIST_ID))
 
     def doClose(self, **kw):
         self.tasks.kill()
@@ -378,19 +398,24 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
         self.tasks.add(task)
         backgroundthread.BGThreader.addTask(task)
 
-    def onDiscoverCredits(self, discover_items, library_guids):
-        """Handle discover credits results — filter to items not in library"""
+    def onDiscoverCredits(self, discover_hubs, library_guids, actor_guids):
+        """Handle discover credits results — populate one hub per credit type with not-in-library items"""
         self.libraryGuids = library_guids
-        self.discoverActorGuids = set(item.guid for item in discover_items)
+        self.discoverActorGuids = actor_guids
 
-        # Filter to items NOT in the user's library
-        self.notInLibraryItems = [item for item in discover_items if item.guid not in library_guids]
+        # Filter each group to not-in-library items and populate sequential hub slots
+        slot = 0
+        for group_type, items in discover_hubs:
+            if slot >= DISCOVER_HUB_SLOTS:
+                break
+            not_in_library = [item for item in items if item.guid not in library_guids]
+            if not_in_library:
+                label = '{0} - {1}'.format(T(32479, 'Not in Library'), group_type.title())
+                self.fillDiscoverHub(slot, not_in_library, label)
+                slot += 1
 
-        util.DEBUG_LOG('ActorWindow: Discover credits: {0} total, {1} in library, {2} not in library'.format(
-            len(discover_items), len(library_guids), len(self.notInLibraryItems)))
-
-        if self.notInLibraryItems:
-            self.fillNotInLibrary()
+        util.DEBUG_LOG('ActorWindow: Discover credits: {0} groups, {1} in library, {2} hubs populated'.format(
+            len(discover_hubs), len(library_guids), slot))
 
         # Now filter the existing filmography to actor-only credits
         self.filterFilmographyToActorCredits()
@@ -414,16 +439,20 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             self.filmographyItems = filtered
             self.fillFilmography()
 
-    def fillNotInLibrary(self):
-        """Populate the Not in Library list with discover items"""
+    def fillDiscoverHub(self, slot, items, label):
+        """Populate a discover hub slot with items and set its label"""
+        if slot >= len(self.discoverListControls):
+            return
+
+        listControl = self.discoverListControls[slot]
         listItems = []
-        for item in self.notInLibraryItems:
+        for item in items:
             mli = self.createNotInLibraryListItem(item)
             listItems.append(mli)
 
-        self.notInLibraryListControl.reset()
-        self.notInLibraryListControl.addItems(listItems)
-        self.setProperty('not_in_library.count', str(len(self.notInLibraryItems)))
+        listControl.reset()
+        listControl.addItems(listItems)
+        self.setProperty('discover.hub.{0}.label'.format(slot), label)
 
     def createNotInLibraryListItem(self, item):
         """Create a ManagedListItem from a DiscoverItem"""
@@ -440,83 +469,34 @@ class ActorWindow(kodigui.ControlledWindow, windowutils.UtilMixin):
             mli.setProperty('role', item.role)
         return mli
 
-    def notInLibraryItemClicked(self):
-        """Show context menu for a Not in Library item"""
-        mli = self.notInLibraryListControl.getSelectedItem()
+    def openDiscoverItem(self, controlID):
+        """Open a discover item in the watchlist preplay screen"""
+        slot = controlID - self.DISCOVER_LIST_BASE_ID
+        if slot < 0 or slot >= len(self.discoverListControls):
+            return
+
+        mli = self.discoverListControls[slot].getSelectedItem()
         if not mli or not mli.dataSource:
             return
 
         item = mli.dataSource
-        options = []
-
-        # Check watchlist state to show the right option
-        is_wl = self.isDiscoverItemWatchlisted(item)
-        if is_wl:
-            options.append({'key': 'remove_watchlist', 'display': T(34011, 'Remove from watchlist')})
-        else:
-            options.append({'key': 'add_watchlist', 'display': T(34092, 'Add to Watchlist')})
-
-        if not options:
+        if not item.ratingKey:
             return
 
-        choice = dropdown.showDropdown(
-            options,
-            pos=(660, 441),
-            close_direction='none',
-            set_dropdown_prop=False,
-            header=item.title,
-            align_items='left'
-        )
-        if not choice:
+        from plexnet import util as pnUtil
+        discover_server = pnUtil.SERVERMANAGER.getDiscoverServer()
+        if not discover_server:
+            util.DEBUG_LOG('ActorWindow: No discover server available')
             return
 
-        if choice['key'] == 'add_watchlist':
-            self.addDiscoverItemToWatchlist(item, mli)
-        elif choice['key'] == 'remove_watchlist':
-            self.removeDiscoverItemFromWatchlist(item, mli)
-
-    def isDiscoverItemWatchlisted(self, item):
-        """Check if a discover item is on the user's watchlist"""
-        try:
-            from plexnet import util as pnUtil
-            from .mixins.watchlist import is_watchlisted
-            server = pnUtil.SERVERMANAGER.getDiscoverServer()
-            if not server:
-                return False
-            return is_watchlisted(item.ratingKey, server)
-        except Exception as e:
-            util.DEBUG_LOG('isDiscoverItemWatchlisted error: {0}'.format(e))
-            return False
-
-    def addDiscoverItemToWatchlist(self, item, mli=None):
-        """Add a discover item to the user's Plex watchlist"""
-        try:
-            from plexnet import util as pnUtil
-            server = pnUtil.SERVERMANAGER.getDiscoverServer()
-            if not server:
-                util.DEBUG_LOG('addDiscoverItemToWatchlist: No discover server')
-                return
-
-            server.query('/actions/addToWatchlist', ratingKey=item.ratingKey, method='put')
-            util.DEBUG_LOG('Added to watchlist: {0}'.format(item.title))
-
-        except Exception as e:
-            util.DEBUG_LOG('addDiscoverItemToWatchlist error: {0}'.format(e))
-
-    def removeDiscoverItemFromWatchlist(self, item, mli=None):
-        """Remove a discover item from the user's Plex watchlist"""
-        try:
-            from plexnet import util as pnUtil
-            server = pnUtil.SERVERMANAGER.getDiscoverServer()
-            if not server:
-                util.DEBUG_LOG('removeDiscoverItemFromWatchlist: No discover server')
-                return
-
-            server.query('/actions/removeFromWatchlist', ratingKey=item.ratingKey, method='put')
-            util.DEBUG_LOG('Removed from watchlist: {0}'.format(item.title))
-
-        except Exception as e:
-            util.DEBUG_LOG('removeDiscoverItemFromWatchlist error: {0}'.format(e))
+        # Pass ratingKey as string — opener.open() fetches the full object from the
+        # discover server, then routes to PrePlayWindowWL (movies) or ShowWindow (shows)
+        self.processCommand(opener.open(
+            item.ratingKey,
+            server=discover_server,
+            from_watchlist=True,
+            external_item=True
+        ))
 
     def onFilmography(self, result):
         self.setProperty('loading', '')
