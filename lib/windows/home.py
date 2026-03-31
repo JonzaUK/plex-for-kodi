@@ -2162,12 +2162,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         if server:
             server.on('notification:timeline', self._onTimelineNotification)
             server.on('notification:activity', self._onActivityNotification)
+            server.on('notification:playing', self._onPlayingNotification)
 
     def _unhookServerNotifications(self):
         server = plexapp.SERVERMANAGER.selectedServer
         if server:
             server.off('notification:timeline', self._onTimelineNotification)
             server.off('notification:activity', self._onActivityNotification)
+            server.off('notification:playing', self._onPlayingNotification)
 
     def unhookSignals(self):
         plexapp.SERVERMANAGER.off('new:server', self.onNewServer)
@@ -2243,6 +2245,26 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 util.LOG('Home: library scan completed for section {0}, refreshing', sectionID)
 
             self._wsFlushDirty()
+
+    def _onPlayingNotification(self, **kwargs):
+        """Handle playing events. Refresh On Deck/CW hubs when a remote session stops."""
+        entries = kwargs.get('entries', [])
+        myClientId = plexapp.util.INTERFACE.getGlobal('clientIdentifier')
+
+        for entry in entries:
+            # Ignore our own playback sessions
+            if entry.get('clientIdentifier') == myClientId:
+                continue
+
+            if entry.get('state') == 'stopped':
+                util.LOG('Home: remote session stopped (client={0}), refreshing On Deck hubs',
+                         entry.get('clientIdentifier', 'unknown'))
+                # Refresh immediately if we're on the home screen, otherwise set dirty flag
+                if self.is_active and not self._shuttingDown and not xbmc.Player().isPlayingVideo():
+                    self._updateOnDeckHubs()
+                else:
+                    self.updateOnDeckHubs()
+                break
 
     def _wsResetDebounce(self):
         """Reset the debounce timer. Fires _wsFlushDirty after the quiet period."""
