@@ -3186,7 +3186,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if button == 0:
                 with busy.BusyContext(delay=True, delay_time=0.2):
                     section.emptyTrash()
-                return self.lastSection
+                # Don't return lastSection - WebSocket will handle the refresh
+                return
         elif choice["key"] == "analyze":
             with busy.BusyContext(delay=True, delay_time=0.2):
                 section.analyze()
