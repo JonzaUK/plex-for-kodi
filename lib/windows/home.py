@@ -573,6 +573,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self._anyItemAction = False
         self._odHubsDirty = False
         self._updateSourceChanged = False
+        self._wsDirtySections = set()  # Section keys pending refresh from WebSocket events
+        self._wsDebounceTimer = None
+        self._wsDebounceDelay = 3  # Seconds to wait after last event before refreshing
         self.librarySettings = None
         self.hubSettings = None
         self.availableHubs = {}  # Catalog of all discovered hubs
@@ -2152,6 +2155,20 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         util.MONITOR.on('system.sleep', self.disableUpdates)
         util.MONITOR.on('system.wakeup', self.onWake)
 
+        self._hookServerNotifications()
+
+    def _hookServerNotifications(self):
+        server = plexapp.SERVERMANAGER.selectedServer
+        if server:
+            server.on('notification:timeline', self._onTimelineNotification)
+            server.on('notification:activity', self._onActivityNotification)
+
+    def _unhookServerNotifications(self):
+        server = plexapp.SERVERMANAGER.selectedServer
+        if server:
+            server.off('notification:timeline', self._onTimelineNotification)
+            server.off('notification:activity', self._onActivityNotification)
+
     def unhookSignals(self):
         plexapp.SERVERMANAGER.off('new:server', self.onNewServer)
         plexapp.SERVERMANAGER.off('remove:server', self.onRemoveServer)
@@ -2176,6 +2193,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.off('watchlist:modified', self.watchlistDirty)
         plexapp.util.APP.off('theme_relevant_setting', self.setThemeDirty)
 
+        self._unhookServerNotifications()
+
         player.PLAYER.off('session.ended', self.updateOnDeckHubs)
         util.MONITOR.off('changed.watchstatus', self.updateOnDeckHubs)
         util.MONITOR.off('screensaver.activated', self.disableUpdates)
@@ -2188,6 +2207,77 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
     def updateSourceChanged(self, value, **kwargs):
         self._updateSourceChanged = value
 
+    # --- WebSocket notification handlers ---
+
+    def _onTimelineNotification(self, **kwargs):
+        """Handle timeline events from WebSocket. Debounce and refresh affected sections."""
+        entries = kwargs.get('entries', [])
+        for entry in entries:
+            sectionID = entry.get('sectionID')
+            if sectionID:
+                self._wsDirtySections.add(str(sectionID))
+
+        # Also mark Home dirty since it shows merged hubs from all libraries
+        if self._wsDirtySections:
+            self._wsDirtySections.add(None)
+
+        self._wsResetDebounce()
+
+    def _onActivityNotification(self, **kwargs):
+        """Handle activity events. Refresh when a library scan completes."""
+        entries = kwargs.get('entries', [])
+        for entry in entries:
+            if entry.get('event') != 'ended':
+                continue
+
+            activity = entry.get('Activity', {})
+            if activity.get('type') != 'library.update.section':
+                continue
+
+            # Scan finished - get the section ID and trigger immediate refresh
+            context = activity.get('Context', {})
+            sectionID = context.get('librarySectionID')
+            if sectionID:
+                self._wsDirtySections.add(str(sectionID))
+                self._wsDirtySections.add(None)  # Home too
+                util.LOG('Home: library scan completed for section {0}, refreshing', sectionID)
+
+            self._wsFlushDirty()
+
+    def _wsResetDebounce(self):
+        """Reset the debounce timer. Fires _wsFlushDirty after the quiet period."""
+        if self._wsDebounceTimer:
+            self._wsDebounceTimer.cancel()
+
+        self._wsDebounceTimer = threading.Timer(self._wsDebounceDelay, self._wsFlushDirty)
+        self._wsDebounceTimer.daemon = True
+        self._wsDebounceTimer.start()
+
+    def _wsFlushDirty(self):
+        """Mark dirty sections as stale so tick() or showHubs() refreshes them."""
+        if self._wsDebounceTimer:
+            self._wsDebounceTimer.cancel()
+            self._wsDebounceTimer = None
+
+        if not self._wsDirtySections:
+            return
+
+        dirty = self._wsDirtySections.copy()
+        self._wsDirtySections.clear()
+
+        util.LOG('Home: WebSocket refresh for sections: {0}', dirty)
+
+        # Mark affected sections as stale by backdating lastUpdated
+        for sectionKey in dirty:
+            hubs = self.sectionHubs.get(sectionKey)
+            if hubs is not None:
+                hubs.lastUpdated = time.time() - HUBS_REFRESH_INTERVAL - 1
+
+        # If we're currently viewing one of the dirty sections, refresh now
+        if (self.lastSection and self.lastSection.key in dirty
+                and self.is_active and not self._shuttingDown
+                and not xbmc.Player().isPlayingVideo()):
+            self.showHubs(self.lastSection, update=True)
 
     def doUpdate(self):
         self._shuttingDown = True
@@ -4373,6 +4463,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.onNewServer()
 
     def onSelectedServerChange(self, **kwargs):
+        # Re-hook WebSocket notifications onto the new server
+        self._unhookServerNotifications()
+        self._hookServerNotifications()
+
         if self.serverRefresh():
             self.setFocusId(self.SECTION_LIST_ID)
             self.changingServer = False

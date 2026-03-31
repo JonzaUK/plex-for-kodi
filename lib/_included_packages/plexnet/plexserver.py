@@ -19,6 +19,7 @@ from . import plexobjects
 from . import plexresource
 from . import plexlibrary
 from . import asyncadapter
+from . import plexnotificationlistener
 from six.moves import range
 
 # from plexapi.client import Client
@@ -74,6 +75,7 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
         self.currentHubs = None
         self.dnsRebindingProtection = False
         self.prefs = {}
+        self.notificationListener = None
 
         if data is None:
             return
@@ -110,6 +112,7 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
         return self.__str__()
 
     def close(self):
+        self.stopNotificationListener()
         self.session.cancel()
 
     def get(self, attr, default=None):
@@ -512,6 +515,7 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
             if (best.isSecure or util.LOCAL_OVER_SECURE) or self.pendingSecureRequests <= 0:
                 util.DEBUG_LOG("Using connection for {0} for now: {1}", repr(self.name), best.address)
                 self.activeConnection = best
+                self.startNotificationListener()
             else:
                 util.DEBUG_LOG("Found a good connection for {0}, but holding out for better", repr(self.name))
 
@@ -529,6 +533,22 @@ class PlexServer(plexresource.PlexResource, signalsmixin.SignalsMixin):
 
         from . import plexservermanager
         plexservermanager.MANAGER.updateReachabilityResult(self, bool(self.activeConnection))
+
+    def startNotificationListener(self):
+        try:
+            if not self.notificationListener:
+                self.notificationListener = plexnotificationlistener.PlexNotificationListener(self)
+            self.notificationListener.start()
+        except Exception as e:
+            util.ERROR_LOG('Failed to start notification listener: {0}', e)
+
+    def stopNotificationListener(self):
+        if self.notificationListener:
+            try:
+                self.notificationListener.stop()
+            except Exception:
+                pass
+            self.notificationListener = None
 
     def markAsRefreshing(self):
         for i in range(len(self.connections)):
