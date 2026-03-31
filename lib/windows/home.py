@@ -576,6 +576,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self._wsDirtySections = set()  # Section keys pending refresh from WebSocket events
         self._wsDebounceTimer = None
         self._wsDebounceDelay = 3  # Seconds to wait after last event before refreshing
+        self._scanTriggeredSections = set()  # Section keys where PM4K triggered a scan
         self.librarySettings = None
         self.hubSettings = None
         self.availableHubs = {}  # Catalog of all discovered hubs
@@ -2226,25 +2227,35 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self._wsResetDebounce()
 
     def _onActivityNotification(self, **kwargs):
-        """Handle activity events. Refresh when a library scan completes."""
+        """Handle activity events. Show scan progress for PM4K-triggered scans, refresh on completion."""
         entries = kwargs.get('entries', [])
         for entry in entries:
-            if entry.get('event') != 'ended':
-                continue
-
             activity = entry.get('Activity', {})
             if activity.get('type') != 'library.update.section':
                 continue
 
-            # Scan finished - get the section ID and trigger immediate refresh
+            event = entry.get('event', '')
             context = activity.get('Context', {})
             sectionID = context.get('librarySectionID')
-            if sectionID:
+            isPM4KScan = sectionID and str(sectionID) in self._scanTriggeredSections
+
+            # Show scan progress notification only for PM4K-triggered scans
+            if isPM4KScan:
+                if event == 'ended':
+                    self._scanTriggeredSections.discard(str(sectionID))
+                    self._hideScanNotification()
+                else:
+                    progress = activity.get('progress', 0)
+                    title = activity.get('title', 'Scanning')
+                    subtitle = activity.get('subtitle', '')
+                    self._showScanNotification(title, subtitle, progress)
+
+            # On scan completion, mark section dirty and let the debouncer refresh
+            if event == 'ended' and sectionID:
                 self._wsDirtySections.add(str(sectionID))
                 self._wsDirtySections.add(None)  # Home too
-                util.LOG('Home: library scan completed for section {0}, refreshing', sectionID)
-
-            self._wsFlushDirty()
+                util.LOG('Home: library scan completed for section {0}', sectionID)
+                self._wsResetDebounce()
 
     def _onPlayingNotification(self, **kwargs):
         """Handle playing events. Refresh On Deck/CW hubs when a remote session stops."""
@@ -2295,11 +2306,38 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if hubs is not None:
                 hubs.lastUpdated = time.time() - HUBS_REFRESH_INTERVAL - 1
 
-        # If we're currently viewing one of the dirty sections, refresh now
-        if (self.lastSection and self.lastSection.key in dirty
-                and self.is_active and not self._shuttingDown
+        # If we're currently viewing one of the dirty sections, refresh it
+        if (self.lastSection and self.is_active and not self._shuttingDown
                 and not xbmc.Player().isPlayingVideo()):
-            self.showHubs(self.lastSection, update=True)
+            # Only refresh the section we're actually looking at
+            if self.lastSection.key in dirty:
+                self.showHubs(self.lastSection, update=True)
+
+    def _showScanNotification(self, title, subtitle, progress):
+        """Show or update the scan progress toast notification."""
+        self.setProperty('scan.active', '1')
+        self.setProperty('scan.title', title)
+        self.setProperty('scan.subtitle', subtitle or '{0}%'.format(progress))
+        # Scale progress (0-100) to pixel width (max 360px for the progress bar)
+        progressWidth = int(360 * max(0, min(progress, 100)) / 100)
+        self.setProperty('scan.progress.width', str(progressWidth))
+
+    def _hideScanNotification(self):
+        """Hide the scan progress toast after a short delay so it doesn't flash."""
+        # Show 100% briefly before hiding
+        self.setProperty('scan.subtitle', '100%')
+        self.setProperty('scan.progress.width', '360')
+
+        def _clearScan():
+            time.sleep(2)
+            self.setProperty('scan.active', '')
+            self.setProperty('scan.title', '')
+            self.setProperty('scan.subtitle', '')
+            self.setProperty('scan.progress.width', '0')
+
+        t = threading.Thread(target=_clearScan)
+        t.daemon = True
+        t.start()
 
     def doUpdate(self):
         self._shuttingDown = True
@@ -3133,9 +3171,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 self.saveLibrarySettings()
                 return self.lastSection
         elif choice["key"] == "refresh":
+            self._scanTriggeredSections.add(str(section.key))
             with busy.BusyContext(delay=True, delay_time=0.2):
                 section.refresh()
-            return self.lastSection
+            # Don't return lastSection - WebSocket will handle the refresh when scan completes
+            return
         elif choice["key"] == "emptyTrash":
             button = optionsdialog.show(
                 T(33083, 'Empty Trash'),

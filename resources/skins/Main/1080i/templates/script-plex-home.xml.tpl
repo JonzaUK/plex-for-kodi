@@ -1184,4 +1184,68 @@
         <texture diffuse="script.plex/busy-diffuse.png">script.plex/busy.gif</texture>
     </control>
 </control>
+
+<!-- Scan progress notification toast -->
+<control type="group">
+    <visible>!String.IsEmpty(Window.Property(scan.active))</visible>
+    <animation effect="slide" start="400,0" end="0,0" time="300" tween="quadratic" easing="out">Visible</animation>
+    <animation effect="fade" start="0" end="100" time="300">Visible</animation>
+    <animation effect="slide" start="0,0" end="400,0" time="300" tween="quadratic" easing="in">Hidden</animation>
+    <animation effect="fade" start="100" end="0" time="300">Hidden</animation>
+    <posx>1490</posx>
+    <posy>{{ vscale(950) }}</posy>
+    <width>400</width>
+    <height>{{ vscale(90) }}</height>
+    <!-- Background panel -->
+    <control type="image">
+        <posx>0</posx>
+        <posy>0</posy>
+        <width>400</width>
+        <height>{{ vscale(90) }}</height>
+        <texture border="12">script.plex/white-square-rounded.png</texture>
+        <colordiffuse>E0202020</colordiffuse>
+    </control>
+    <!-- Scan title -->
+    <control type="label">
+        <posx>20</posx>
+        <posy>{{ vscale(12) }}</posy>
+        <width>360</width>
+        <height>{{ vscale(25) }}</height>
+        <font>font12</font>
+        <align>left</align>
+        <aligny>center</aligny>
+        <textcolor>FFFFFFFF</textcolor>
+        <label>$INFO[Window.Property(scan.title)]</label>
+    </control>
+    <!-- Progress bar background -->
+    <control type="image">
+        <posx>20</posx>
+        <posy>{{ vscale(50) }}</posy>
+        <width>360</width>
+        <height>{{ vscale(4) }}</height>
+        <texture>script.plex/white-square-1px.png</texture>
+        <colordiffuse>40FFFFFF</colordiffuse>
+    </control>
+    <!-- Progress bar fill -->
+    <control type="image">
+        <posx>20</posx>
+        <posy>{{ vscale(50) }}</posy>
+        <width>$INFO[Window.Property(scan.progress.width)]</width>
+        <height>{{ vscale(4) }}</height>
+        <texture>script.plex/white-square-1px.png</texture>
+        <colordiffuse>FFE5A00D</colordiffuse>
+    </control>
+    <!-- Progress percentage -->
+    <control type="label">
+        <posx>20</posx>
+        <posy>{{ vscale(58) }}</posy>
+        <width>360</width>
+        <height>{{ vscale(22) }}</height>
+        <font>font10</font>
+        <align>left</align>
+        <aligny>center</aligny>
+        <textcolor>99FFFFFF</textcolor>
+        <label>$INFO[Window.Property(scan.subtitle)]</label>
+    </control>
+</control>
 {% endblock header %}
