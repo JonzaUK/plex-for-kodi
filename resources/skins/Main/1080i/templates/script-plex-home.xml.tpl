@@ -471,12 +471,12 @@
     <control type="group">
         <posx>576</posx>
         <posy>{{ vscale(34) }}</posy>
-        <width>1000</width>
+        <width>1200</width>
         <height>{{ vscale(1046) }}</height>
         <control type="grouplist">
             <posx>0</posx>
             <posy>0</posy>
-            <width>1000</width>
+            <width>1200</width>
             <height>{{ vscale(1046) }}</height>
             <ondown>50</ondown>
             <onleft>204</onleft>
