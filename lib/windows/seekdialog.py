@@ -579,6 +579,12 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         self.isTranscoded = not self.isDirectPlay
         self.setProperty('video.title', title)
         self.setProperty('is.show', (self.player.video.type == 'episode') and '1' or '')
+        # set spoiler-relevant properties immediately; updateProperties() only runs after the window has rendered
+        # (fresh dialog) or possibly never (reused dialog without a playlist), which would briefly - or permanently -
+        # leak the episode title/times with the previous or empty property state (#279)
+        self.setBoolProperty('hide.title', self.player.video.type == 'episode'
+                             and 'no_unwatched_episode_titles' in (self.no_spoilers or ()))
+        self.setBoolProperty('no.osd.hide_info', self.no_time_no_osd_spoilers)
         self.setProperty('ep.year', (self.player.video.type == 'episode') and self.player.video.year or '')
         self.setProperty('has.playlist', self.handler.playlist and '1' or '')
         self.setProperty('shuffled', (self.handler.playlist and self.handler.playlist.isShuffled) and '1' or '')
