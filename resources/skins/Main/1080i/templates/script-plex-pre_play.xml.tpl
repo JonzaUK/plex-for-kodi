@@ -184,7 +184,7 @@
                 <visible>!String.IsEmpty(Window.Property(clear.logo))</visible>
                 <posx>466</posx>
                 <posy>0</posy>
-                <width>380</width>
+                <width>560</width>
                 <height>{{ vscale(68) }}</height>
                 <aspectratio align="left" aligny="bottom">keep</aspectratio>
                 <texture background="true">$INFO[Window.Property(clear.logo)]</texture>

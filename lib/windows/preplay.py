@@ -103,7 +103,7 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, RatingsMixi
     EXTRA_DIM = util.scaleResolution(329, 185)
     ROLES_DIM = util.scaleResolution(334, 334)
     PREVIEW_DIM = util.scaleResolution(343, 193)
-    CLEAR_LOGO_DIM = util.scaleResolution(380, 68)
+    CLEAR_LOGO_DIM = util.scaleResolution(560, 68)
 
     ROLES_LIST_ID = 400
     REVIEWS_LIST_ID = 401
