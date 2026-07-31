@@ -247,7 +247,7 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, SeasonsMix
     RELATED_DIM = util.scaleResolution(268, 402)
     EXTRA_DIM = util.scaleResolution(329, 185)
     ROLES_DIM = util.scaleResolution(334, 334)
-    CLEAR_LOGO_DIM = util.scaleResolution(380, 60)
+    CLEAR_LOGO_DIM = util.scaleResolution(380, 102)
 
     LIST_OPTIONS_BUTTON_ID = 111
 
@@ -1481,11 +1481,22 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, SeasonsMix
         if video.index:
             mli.setProperty('season', T(32303, 'Season').format(video.parentIndex))
             mli.setProperty('episode', T(32304, 'Episode').format(video.index))
+            # zero-padded and joined, unlike the "S1 • E3" used elsewhere: the heading it goes into already
+            # separates its fields with bullets and a third one reads as noise
+            seIndex = u'{0}{1}'.format(T(32310, 'S').format('{0:02d}'.format(video.parentIndex.asInt())),
+                                       T(32311, 'E').format('{0:02d}'.format(video.index.asInt())))
         else:
             mli.setProperty('season', '')
             mli.setProperty('episode', '')
+            seIndex = ''
 
         mli.setProperty('date', util.cleanLeadingZeros(video.originallyAvailableAt.asDatetime('%B %d, %Y')))
+
+        # SxxEyy and the air date, merged into the heading ahead of the episode title. Composed here rather
+        # than in the skin because $INFO can't drop a separator for a special with no index, or for an
+        # episode with no air date, without leaving a stray bullet behind.
+        heading = [p for p in (seIndex, video.originallyAvailableAt.asDatetime(util.shortDF)) if p]
+        mli.setProperty('heading.prefix', heading and u'{0} • '.format(u' • '.join(heading)) or '')
 
         # mli.setProperty('related.header', 'Related Shows')
         mli.setProperty('year', video.year)

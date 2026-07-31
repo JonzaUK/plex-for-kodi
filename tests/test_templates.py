@@ -326,7 +326,8 @@ class ClearLogoTest(KodiTestCase):
             visible = control.findtext("visible") or ""
             if "clear.logo" not in visible:
                 continue
-            if control.get("type") == "label":
+            # the title is the label that actually renders text, not a spacer sized to the logo's width
+            if control.get("type") == "label" and control.findtext("label"):
                 title = control
             elif control.get("type") == "image":
                 logo = control
