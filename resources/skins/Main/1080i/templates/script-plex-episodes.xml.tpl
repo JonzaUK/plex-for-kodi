@@ -200,7 +200,7 @@
             <!-- 714, not the heading's 950: this box overlaps the ratings' y range, and 776+714 stops short
                  of them at 1560. The heading below clears them and can run wider. -->
             <width>714</width>
-            <height>{{ vscale(102) }}</height>
+            <height>{{ vscale(68) }}</height>
             <!-- stands in for the logo and has its whole 100px box to fill, so it takes the largest face
                  the templates use; font32_title is the step down if this crowds the box -->
             <font>font45</font>
@@ -244,17 +244,16 @@
             </control>
         </control>
 
-        <!-- Top on the artwork's baseline at 0, same as the movie and show screens, so a logo starts in the
-             same place whichever screen you're on. The height is per-screen: this column's next row is the
-             heading at 114, where theirs is a meta row at 80, so it runs to 102 rather than their 68.
-             Bottom-aligned, so a wide wordmark - width-limited at 380 anyway - renders identically on all
-             three and only a tall logo uses the extra room. -->
+        <!-- Exactly the box the movie and show screens use, 0..68. This column could afford 102 - its next
+             row is the heading at 114, where theirs is a meta row at 80 - but the logo is bottom-aligned, so
+             a taller box draws the logo lower and it stops lining up with the other screens. Equal size or
+             equal position; position won. -->
         <control type="image">
             <visible>!String.IsEmpty(Window.Property(clear.logo))</visible>
             <posx>776</posx>
             <posy>0</posy>
             <width>380</width>
-            <height>{{ vscale(102) }}</height>
+            <height>{{ vscale(68) }}</height>
             <aspectratio align="left" aligny="bottom">keep</aspectratio>
             <texture background="true">$INFO[Window.Property(clear.logo)]</texture>
         </control>

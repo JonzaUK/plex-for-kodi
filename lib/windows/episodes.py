@@ -247,7 +247,7 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, SeasonsMix
     RELATED_DIM = util.scaleResolution(268, 402)
     EXTRA_DIM = util.scaleResolution(329, 185)
     ROLES_DIM = util.scaleResolution(334, 334)
-    CLEAR_LOGO_DIM = util.scaleResolution(380, 102)
+    CLEAR_LOGO_DIM = util.scaleResolution(380, 68)
 
     LIST_OPTIONS_BUTTON_ID = 111
 
