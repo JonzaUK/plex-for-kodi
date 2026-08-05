@@ -4,8 +4,8 @@
         <posx>55</posx>
         <posy>{{ vscale(72) }}</posy>
         <control type="group">
-            <animation effect="zoom" start="100" end="110" time="100" center="122,{{ vscale(122) }}" reversible="false">Focus</animation>
-            <animation effect="zoom" start="110" end="100" time="100" center="122,{{ vscale(122) }}" reversible="false">UnFocus</animation>
+            <animation effect="zoom" start="100" end="105" time="150" center="122,{{ vscale(122) }}">Focus</animation>
+            <animation effect="zoom" start="105" end="100" time="0" center="122,{{ vscale(122) }}">UnFocus</animation>
             <posx>0</posx>
             <posy>0</posy>
             <control type="image">
@@ -15,6 +15,7 @@
                 <width>324</width>
                 <height>{{ vscale(324) }}</height>
                 <texture border="42">script.plex/drop-shadow.png</texture>
+                <colordiffuse>40FFFFFF</colordiffuse>
             </control>
             <control type="group">
                 <posx>5</posx>
@@ -44,6 +45,14 @@
                         <height>{{ vscale(128) }}</height>
                         <texture>script.plex/home/busy.gif</texture>
                     </control>
+                </control>
+                <!-- Opaque backing - prevents background art bleed through rounded corners -->
+                <control type="image">
+                    <posx>0</posx>
+                    <posy>0</posy>
+                    <width>244</width>
+                    <height>{{ vscale(244) }}</height>
+                    <texture colordiffuse="FF1A1A1A">script.plex/white-rounded-square.png</texture>
                 </control>
                 <control type="image">
                     <posx>0</posx>
@@ -111,7 +120,8 @@
                 <posy>0</posy>
                 <width>254</width>
                 <height>{{ vscale(254) }}</height>
-                <texture border="10">script.plex/home/selected.png</texture>
+                <texture border="10">script.plex/home/selected-white.png</texture>
+                <colordiffuse>FFFFFFFF</colordiffuse>
             </control>
         </control>
     </control>

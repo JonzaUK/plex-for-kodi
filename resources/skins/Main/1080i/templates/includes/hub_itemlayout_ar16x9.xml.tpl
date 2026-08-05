@@ -32,6 +32,14 @@
                     <texture>script.plex/home/busy.gif</texture>
                 </control>
             </control>
+            <!-- Opaque backing - prevents background art bleed through rounded corners -->
+            <control type="image">
+                <posx>0</posx>
+                <posy>0</posy>
+                <width>532</width>
+                <height>{{ vscale(299) }}</height>
+                <texture colordiffuse="FF1A1A1A">script.plex/white-rounded-ar16x9.png</texture>
+            </control>
             <control type="image">
                 <posx>0</posx>
                 <posy>0</posy>

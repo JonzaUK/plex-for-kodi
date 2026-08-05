@@ -507,7 +507,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     OPTIONS_GROUP_ID = 200
 
-    SECTION_LIST_ID = 101
+    SIDEBAR_GROUP_ID = 9000
+    SECTION_LIST_ID = 9001
     SERVER_BUTTON_ID = 201
 
     USER_BUTTON_ID = 202
@@ -754,7 +755,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                            "re-set on the last BGM encounter".format(lastGoodVlm))
             xbmc.executebuiltin("SetVolume({})".format(lastGoodVlm))
 
-        self.sectionList = kodigui.ManagedControlList(self, self.SECTION_LIST_ID, 7)
+        self.sectionList = kodigui.ManagedControlList(self, self.SECTION_LIST_ID, 15)
         self.serverList = kodigui.ManagedControlList(self, self.SERVER_LIST_ID, 10)
         self.userList = kodigui.ManagedControlList(self, self.USER_LIST_ID, 5)
 
@@ -765,6 +766,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             for i in range(hub_count)
         )
         self.hubFocusIndexes = tuple(range(hub_count))
+
+        self.showHero = util.getSetting('show_hero', True)
+        self.setProperty('show.hero', '1' if self.showHero else '')
+        self.useClearLogos = util.getSetting('clear_logos', True)
 
         self.bottomItem = 0
         if self.serverRefresh():
@@ -812,9 +817,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             if needs_hub_switch:
                 self.showHubs(home_section)
             self.setFocusId(self.SECTION_LIST_ID)
-            self.sectionList.setSelectedItemByPos(0)
+            self.sectionList.setSelectedItemByPos(1)  # Index 1 = Home (0 = Search)
             # somehow we need to do this as well.
-            xbmc.executebuiltin('Control.SetFocus({0}, {1})'.format(self.SECTION_LIST_ID, 0))
+            xbmc.executebuiltin('Control.SetFocus({0}, {1})'.format(self.SECTION_LIST_ID, 1))
             self.go_root = False
             # set the hold deadline AT THE END so the 150ms window is measured from when the
             # post-branch event queue starts draining (showHubs can take several hundred ms,
@@ -2307,6 +2312,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.on('account:response', self.displayServerAndUser)
         plexapp.util.APP.on('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.on('change:hubs_bifurcation_lines', self.updateProperties)
+        plexapp.util.APP.on('change:show_hero', self.onShowHeroChanged)
+        plexapp.util.APP.on('change:clear_logos', self.onUseClearLogosChanged)
         plexapp.util.APP.on('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.on('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.on('change:path_mapping_indicators', self.setDirty)
@@ -2340,6 +2347,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         plexapp.util.APP.off('account:response', self.displayServerAndUser)
         plexapp.util.APP.off('sli:reachability:received', self.displayServerAndUser)
         plexapp.util.APP.off('change:hubs_bifurcation_lines', self.updateProperties)
+        plexapp.util.APP.off('change:show_hero', self.onShowHeroChanged)
+        plexapp.util.APP.off('change:clear_logos', self.onUseClearLogosChanged)
         plexapp.util.APP.off('change:no_episode_spoilers4', self.setDirty)
         plexapp.util.APP.off('change:spoilers_allowed_genres2', self.setDirty)
         plexapp.util.APP.off('change:path_mapping_indicators', self.setDirty)
@@ -2592,11 +2601,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 self.setFocusId(self.USER_BUTTON_ID)
             elif controlID == self.USER_BUTTON_ID and action == xbmcgui.ACTION_MOVE_LEFT:
                 self.setFocusId(self.SERVER_BUTTON_ID)
-            elif controlID == self.SEARCH_BUTTON_ID and action == xbmcgui.ACTION_MOVE_RIGHT:
-                if xbmc.getCondVisibility('Player.HasMedia + Control.IsVisible({0})'.format(self.PLAYER_STATUS_BUTTON_ID)):
-                    self.setFocusId(self.PLAYER_STATUS_BUTTON_ID)
-                else:
-                    self.setFocusId(self.SERVER_BUTTON_ID)
             elif controlID == self.PLAYER_STATUS_BUTTON_ID and action == xbmcgui.ACTION_MOVE_RIGHT:
                 self.setFocusId(self.SERVER_BUTTON_ID)
             elif 399 < controlID < 500:
@@ -2633,13 +2637,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                         self.setFocusId(self.SERVER_BUTTON_ID)
                         return
 
-                    if controlID == self.SECTION_LIST_ID and self.sectionList.control.getSelectedPosition() > 0:
+                    if controlID == self.SECTION_LIST_ID and self.sectionList.control.getSelectedPosition() > 1:
                         self.goHome()
                         return
 
                     if util.addonSettings.fastBack and not optionsFocused and offSections \
                             and self.lastFocusID not in (self.USER_BUTTON_ID, self.SERVER_BUTTON_ID,
-                                                         self.SEARCH_BUTTON_ID, self.SECTION_LIST_ID):
+                                                         self.SECTION_LIST_ID):
                         self.setProperty('hub.focus', '0')
                         self.setFocusId(self.SECTION_LIST_ID)
                         return
@@ -2701,6 +2705,10 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             return
 
         if controlID == self.SECTION_LIST_ID:
+            item = self.sectionList.getSelectedItem()
+            if item and item.getProperty('is.search'):
+                self.searchButtonClicked()
+                return
             if not self.movingSection:
                 self.sectionClicked()
         # elif controlID == self.SERVER_BUTTON_ID:
@@ -2719,8 +2727,6 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.showAudioPlayer()
         elif 399 < controlID < 500:
             self.hubItemClicked(controlID)
-        elif controlID == self.SEARCH_BUTTON_ID:
-            self.searchButtonClicked()
 
     def onFocus(self, controlID):
         # within the 150ms hold window after go_root, any non-section-list focus event is the
@@ -2733,7 +2739,9 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.setFocusId(self.SECTION_LIST_ID)
             return
 
-        if controlID != 204 and controlID < 500:
+        # the sidebar drives the hero off section-list focus, so that control has to get
+        # through here too - the hold window above has already filtered the stray events
+        if controlID != 204 and (controlID < 500 or controlID == self.SECTION_LIST_ID):
             # don't store focus for mini music player
             self.lastFocusID = controlID
 
@@ -2747,15 +2755,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self._shuttingDown):
             self.checkSectionItem()
 
-        if xbmc.getCondVisibility('ControlGroup(50).HasFocus(0) + ControlGroup(100).HasFocus(0)'):
-            util.setGlobalBoolProperty('off.sections', '')
-        elif controlID != 250 and xbmc.getCondVisibility('ControlGroup(50).HasFocus(0) + !ControlGroup(100).HasFocus(0)'):
-            util.setGlobalBoolProperty('off.sections', '1')
+        # New Experience: nav bar stays visible always
+        util.setGlobalBoolProperty('off.sections', '')
 
     def goHome(self, **kwargs):
         self.setProperty('hub.focus', '')
         self.setFocusId(self.SECTION_LIST_ID)
-        self.sectionList.setSelectedItemByPos(0)
+        self.sectionList.setSelectedItemByPos(1)  # Index 1 = Home (0 = Search)
         # set lastSection here already, otherwise tick() might interfere
         # fixme: Might still happen in a race condition, check later
         self.lastSection = home_section
@@ -2842,6 +2848,15 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def showBusy(self, on=True):
         self.setProperty('busy', on and '1' or '')
+
+    def onShowHeroChanged(self, *args, **kwargs):
+        self.showHero = kwargs.get('value', True)
+        self.setProperty('show.hero', '1' if self.showHero else '')
+
+    def onUseClearLogosChanged(self, *args, **kwargs):
+        self.useClearLogos = kwargs.get('value', True)
+        if not self.useClearLogos:
+            self.setProperty('hero.clearlogo', '')
 
     def setDirty(self, *args, **kwargs):
         self._reloadOnReinit = True
@@ -3104,7 +3119,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def sectionMenu(self):
         item = self.sectionList.getSelectedItem()
-        if not item or not item.getProperty('item'):
+        if not item or not item.getProperty('item') or item.getProperty('is.search'):
             return
 
         section = item.dataSource
@@ -3525,29 +3540,34 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def sectionMover(self, item, action):
         def stop_moving(reset=False):
-            # set everything to non-moving and re-insert home item
+            # set everything to non-moving and re-insert search + home items
             self.movingSection = False
             self.setBoolProperty("moving", False)
             item.setBoolProperty("moving", False)
-            homemli = kodigui.ManagedListItem(T(32332, 'Home'), data_source=home_section)
+            homemli = kodigui.ManagedListItem(T(32332, 'Home'), iconImage='script.plex/home/type/home.png', data_source=home_section)
             homemli.setProperty('is.home', '1')
             homemli.setProperty('item', '1')
+            searchmli = kodigui.ManagedListItem(T(32431, 'Search'), iconImage='script.plex/buttons/search.png')
+            searchmli.setProperty('is.search', '1')
+            searchmli.setProperty('item', '1')
             if reset:
                 if self._initialMovingSectionPos is not None:
                     self.sectionList.moveItem(item, self._initialMovingSectionPos)
                 self._initialMovingSectionPos = None
-            self.sectionList.insertItem(0, homemli)
+            self.sectionList.insertItem(0, searchmli)
+            self.sectionList.insertItem(1, homemli)
             if reset:
-                self.sectionList.selectItem(0)
+                self.sectionList.selectItem(1)  # Select Home
             self.sectionChanged()
 
         if action == "init":
             self.movingSection = item
             self.setBoolProperty("moving", True)
-            self._initialMovingSectionPos = self.sectionList.getSelectedPos() - 1
+            self._initialMovingSectionPos = self.sectionList.getSelectedPos() - 2  # Account for Search + Home
 
-            # remove home item
-            self.sectionList.removeItem(0)
+            # remove search and home items
+            self.sectionList.removeItem(0)  # Search
+            self.sectionList.removeItem(0)  # Home (shifted to 0)
             self.sectionList.setSelectedItem(item)
 
             item.setBoolProperty("moving", True)
@@ -3578,7 +3598,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def checkSectionItem(self, force=False, action=None):
         item = self.sectionList.getSelectedItem()
-        if not item:
+        if not item or item.getProperty('is.search'):
             return
 
         if not item.getProperty('item') and action:
@@ -3614,6 +3634,11 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         if util.addonSettings.dynamicBackgrounds and is_valid_mli:
             self.updateBackgroundFrom(mli.dataSource)
+
+        if is_valid_mli:
+            if self.showHero:
+                self.updateHeroFromItem(mli)
+            self.updateHeroArt(mli.dataSource)
 
         if not mli or not mli.getProperty('is.end') or mli.getProperty('is.updating') == '1':
             # round robining
@@ -3660,6 +3685,160 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                                      canceledCallback=lambda hub: mli.setBoolProperty('is.updating', False))
         self.tasks.append(task)
         backgroundthread.BGThreader.addTask(task)
+
+    def updateHeroFromItem(self, mli):
+        """Update the hero/spotlight section with details from the focused hub item."""
+        obj = mli.dataSource if mli else None
+        if not obj:
+            self.clearHeroProperties()
+            return
+
+        obj_type = obj.type if hasattr(obj, 'type') else ''
+
+        # Title and subtitle
+        if obj_type == 'episode':
+            self.setProperty('hero.title', obj.grandparentTitle or obj.title or '')
+            self.setProperty('hero.subtitle', obj.title or '')
+            meta_parts = []
+            if obj.get('parentIndex') and obj.get('index'):
+                meta_parts.append('S{0} E{1}'.format(obj.parentIndex, obj.index))
+            if obj.get('originallyAvailableAt'):
+                try:
+                    meta_parts.append(obj.originallyAvailableAt.asDatetime('%b %d, %Y'))
+                except Exception:
+                    pass
+            if obj.get('duration'):
+                meta_parts.append(util.durationToText(obj.duration.asInt()))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+            if obj.get('viewOffset') and obj.get('duration'):
+                remaining_ms = obj.duration.asInt() - obj.viewOffset.asInt()
+                if remaining_ms > 0:
+                    self.setProperty('hero.remainingTime', '{0} left'.format(util.durationToText(remaining_ms)))
+                else:
+                    self.setProperty('hero.remainingTime', '')
+            else:
+                self.setProperty('hero.remainingTime', '')
+        elif obj_type == 'movie':
+            self.setProperty('hero.title', obj.title or '')
+            self.setProperty('hero.subtitle', obj.get('tagline') or '')
+            meta_parts = []
+            if obj.get('year'):
+                meta_parts.append(str(obj.year))
+            if obj.get('duration'):
+                meta_parts.append(util.durationToText(obj.duration.asInt()))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+            if obj.get('viewOffset') and obj.get('duration'):
+                remaining_ms = obj.duration.asInt() - obj.viewOffset.asInt()
+                if remaining_ms > 0:
+                    self.setProperty('hero.remainingTime', '{0} left'.format(util.durationToText(remaining_ms)))
+                else:
+                    self.setProperty('hero.remainingTime', '')
+            else:
+                self.setProperty('hero.remainingTime', '')
+        elif obj_type == 'show':
+            self.setProperty('hero.title', obj.title or '')
+            self.setProperty('hero.subtitle', obj.get('tagline') or '')
+            meta_parts = []
+            if obj.get('year'):
+                meta_parts.append(str(obj.year))
+            if obj.get('contentRating'):
+                meta_parts.append(obj.contentRating)
+            if obj.get('leafCount'):
+                meta_parts.append('{0} episodes'.format(obj.leafCount))
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        elif obj_type in ('artist', 'album', 'track'):
+            self.setProperty('hero.title', obj.title or '')
+            subtitle = ''
+            if obj_type == 'album' and obj.get('parentTitle'):
+                subtitle = obj.parentTitle
+            elif obj_type == 'track' and obj.get('grandparentTitle'):
+                subtitle = obj.grandparentTitle
+            self.setProperty('hero.subtitle', subtitle)
+            self.setProperty('hero.metadata', '')
+        elif obj_type == 'season':
+            self.setProperty('hero.title', obj.get('parentTitle') or obj.title or '')
+            self.setProperty('hero.subtitle', obj.title or '')
+            meta_parts = []
+            if obj.get('leafCount'):
+                meta_parts.append('{0} episodes'.format(obj.leafCount))
+            self.setProperty('hero.metadata', u'  \u2022  '.join(meta_parts))
+        else:
+            self.setProperty('hero.title', obj.get('title') or '')
+            self.setProperty('hero.subtitle', '')
+            self.setProperty('hero.metadata', '')
+
+        # Clear logo. clearLogoFrom() honours the clear_logos setting itself and drops logos
+        # too square to read as a wordmark, so the hero gets the same treatment as the
+        # detail screens.
+        self.setProperty('hero.clearlogo', util.clearLogoFrom(obj, 600, 110))
+
+        # Description
+        summary = obj.get('summary') or ''
+        if len(summary) > 800:
+            summary = summary[:797] + '...'
+        self.setProperty('hero.description', summary)
+
+        # Cast (for movies/episodes)
+        cast = ''
+        try:
+            roles = obj.roles()
+            if roles:
+                cast = u', '.join([r.tag for r in roles[:5]])
+        except Exception:
+            pass
+        self.setProperty('hero.cast', cast)
+
+        # Type
+        self.setProperty('hero.type', obj_type)
+
+    def updateHeroArt(self, obj):
+        """Set unblurred art for right-side hero display."""
+        art = obj.get('art') or obj.get('parentArt') or obj.get('grandparentArt')
+        if art:
+            url = art.asTranscodedImageURL(1920, 1080, blur=0, opacity=100)
+            self.setProperty('hero.art', url)
+        else:
+            self.setProperty('hero.art', '')
+
+        # Set hero background colors from UltraBlurColors child XML element
+        # e.g. <UltraBlurColors topLeft="123145" topRight="205a8f" bottomRight="27628f" bottomLeft="286582"/>
+        hero_color = ''
+        if obj.data is not None:
+            ubc = obj.data.find('UltraBlurColors')
+            if ubc is not None:
+                hero_color = ubc.attrib.get('bottomLeft') or ubc.attrib.get('topLeft') or ''
+                # Set all four corner colors for gradient background
+                for corner in ('topLeft', 'topRight', 'bottomRight', 'bottomLeft'):
+                    c = ubc.attrib.get(corner, '')
+                    if c:
+                        c = 'FF' + c.lstrip('#')
+                    self.setProperty('hero.color.{}'.format(corner), c)
+        if hero_color:
+            hero_color = 'FF' + hero_color.lstrip('#')
+        self.setProperty('hero.color', hero_color)
+
+    def updateActiveSectionMarker(self, active_section):
+        """Update the is.active property on section list items to highlight the current section."""
+        for i in range(self.sectionList.size()):
+            mli = self.sectionList[i]
+            if mli and mli.dataSource == active_section:
+                mli.setProperty('is.active', '1')
+            elif mli:
+                mli.setProperty('is.active', '')
+
+    def clearHeroProperties(self):
+        """Clear all hero section properties."""
+        for prop in ('hero.title', 'hero.subtitle', 'hero.metadata',
+                     'hero.remainingTime',
+                     'hero.description', 'hero.cast', 'hero.type', 'hero.art',
+                     'hero.clearlogo', 'hero.color', 'hero.color.topLeft',
+                     'hero.color.topRight', 'hero.color.bottomRight',
+                     'hero.color.bottomLeft'):
+            self.setProperty(prop, '')
 
     def displayServerAndUser(self, **kwargs):
         title = plexapp.ACCOUNT.title or plexapp.ACCOUNT.username or ' '
@@ -3737,11 +3916,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 util.MONITOR.waitFor()
 
             self.setProperty('hub.focus', '')
+            self.clearHeroProperties()
             if util.addonSettings.dynamicBackgrounds:
                 self.backgroundSet = False
 
             util.DEBUG_LOG('Section changed ({0}): {1}', section.key, repr(section.title))
             self.lastSection = section
+            self.updateActiveSectionMarker(section)
             self.showHubs(section)
 
         # timing issue
@@ -3878,7 +4059,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self.sectionHubs = {}
         items = []
 
-        homemli = kodigui.ManagedListItem(T(32332, 'Home'), data_source=home_section)
+        # Search item at top of sidebar
+        searchmli = kodigui.ManagedListItem(T(32431, 'Search'), iconImage='script.plex/buttons/search.png')
+        searchmli.setProperty('is.search', '1')
+        searchmli.setProperty('item', '1')
+        items.append(searchmli)
+
+        homemli = kodigui.ManagedListItem(T(32332, 'Home'), iconImage='script.plex/home/type/home.png', data_source=home_section)
         homemli.setProperty('is.home', '1')
         homemli.setProperty('item', '1')
         items.append(homemli)
@@ -3969,14 +4156,16 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         show_pm_indicator = util.getSetting('path_mapping_indicators')
         for section in sections:
             mli = kodigui.ManagedListItem(section.title,
-                                          thumbnailImage='script.plex/home/type/{0}.png'.format(section.type),
+                                          iconImage='script.plex/home/type/{0}.png'.format(section.type),
                                           data_source=section)
             mli.setProperty('item', '1')
             if section == playlists_section:
                 mli.setProperty('is.playlists', '1')
-                mli.setThumbnailImage('script.plex/home/type/playlists.png')
+                mli.setIconImage('script.plex/home/type/playlists.png')
             elif section == watchlist_section:
+                # the stock home binds ListItem.Thumb here, the sidebar binds ListItem.Icon
                 mli.setThumbnailImage('script.plex/home/type/watchlist.png')
+                mli.setIconImage('script.plex/home/type/watchlist.png')
             elif isinstance(section, PinnedTypeSection):
                 # no icon of its own; it keeps the library's type icon
                 mli.setProperty('is.pinned.type', section.itemType)
@@ -3990,11 +4179,14 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
         self.bottomItem = len(items) - 1
 
-        for x in range(len(items), 8):
-            mli = kodigui.ManagedListItem()
-            items.append(mli)
+        # Mark the initial active section
+        active_section = focus_section or home_section
+        for mli in items:
+            if mli.dataSource == active_section:
+                mli.setProperty('is.active', '1')
+                break
 
-        self.lastSection = focus_section or home_section
+        self.lastSection = active_section
         self.sectionList.reset()
         self.sectionList.addItems(items)
 
@@ -4291,6 +4483,19 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                     self.focusFirstValidHub(focus)
                 except Exception:
                     util.ERROR("Home: failed to restore focus after hub cleanup")
+
+        # Auto-populate hero from first hub's first item
+        if hasContent and not update:
+            for i, control in enumerate(self.hubControls):
+                if len(control) > 0 and control[0].dataSource:
+                    mli = control[0]
+                    if self.showHero:
+                        self.updateHeroFromItem(mli)
+                    self.updateHeroArt(mli.dataSource)
+                    if util.addonSettings.dynamicBackgrounds:
+                        self.updateBackgroundFrom(mli.dataSource)
+                    break
+
         self.storeLastBG()
 
     def showHub(self, hub, items=None, is_home=False, reselect_pos=None, hub_index=None):
@@ -4683,7 +4888,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
 
     def sectionClicked(self):
         item = self.sectionList.getSelectedItem()
-        if not item:
+        if not item or item.getProperty('is.search'):
             return
 
         section = item.dataSource
@@ -4752,7 +4957,13 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
             self.serverList.replaceItems(items)
             itemHeight = util.vscale(100, r=0)
 
-            self.getControl(800).setHeight((min(len(items), 9) * itemHeight) + 80)
+            listHeight = min(len(items), 9) * itemHeight
+            self.getControl(800).setHeight(listHeight + 80)
+
+            # Position dropdown so it grows upward from the server button area
+            buttonY = util.vscale(990, r=0)
+            dropdownY = buttonY - listHeight
+            self.getControl(802).setPosition(80, dropdownY)
 
             for item in items:
                 if item.dataSource != kodigui.DUMMY_DATA_SOURCE:
