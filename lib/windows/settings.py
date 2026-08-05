@@ -721,6 +721,12 @@ class Settings(object):
                     T(35047, "Replace the written title with the logo image your server has stored for the "
                              "item. Items without a logo keep their written title.")
                 ),
+                BoolSetting(
+                    'show_hero', T(35050, 'Show Hero Info on Home'), True
+                ).description(
+                    T(35051, 'Display hero spotlight with title, metadata, summary, and art at the top of the '
+                             'home screen. Disabling this gives more space for hub rows.')
+                ),
                 BoolUserSetting(
                     'use_watchlist', T(34007, 'Use Watchlist'), True
                 ).description(
