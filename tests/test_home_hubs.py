@@ -21,6 +21,8 @@ the import lets that thread exit immediately.
 
 from __future__ import absolute_import
 
+from unittest.mock import Mock, patch
+
 from kodienv import ENV
 
 ENV.abort_requested = True
@@ -59,6 +61,19 @@ def homeWindow(section_hubs=None, hub_settings=None, all_sections=None):
     win.hubSettings = hub_settings or {}
     win.allSections = all_sections or {}
     return win
+
+
+class CrossSectionCallbackTest(KodiTestCase):
+    def test_missing_source_redraws_home_before_first_refresh(self):
+        ENV.settings["no_episode_spoilers4"] = "[]"
+        with patch("lib.windows.windowutils.HOME"), patch.object(HomeWindow, "setProperty"):
+            win = HomeWindow()
+        win.sectionHubs[None] = HubsList().init()
+        win.showHubs = Mock()
+
+        win.crossSectionHubsCallback(FakeSection("3", "Movies"), HubsList().init())
+
+        win.showHubs.assert_called_once_with(win.lastSection, update=False)
 
 
 class CombinedHubsDedupTest(KodiTestCase):

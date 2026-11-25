@@ -682,6 +682,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
         self.lastFocusID = None
         self.lastNonOptionsFocusID = None
         self.sectionHubs = {}
+        self._pendingCrossSources = 0
         self.updateHubs = {}
         self.changingServer = False
         self._shuttingDown = False
@@ -2210,9 +2211,8 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 self.sectionHubs[section.key] = sorted_hubs
 
                 # Decrement pending cross-section source counter
-                pending = getattr(self, '_pendingCrossSources', 0)
-                if pending > 0:
-                    self._pendingCrossSources = pending - 1
+                if self._pendingCrossSources > 0:
+                    self._pendingCrossSources -= 1
 
                 # Trigger redisplay if needed
                 if self.lastSection:
@@ -3775,8 +3775,7 @@ class HomeWindow(kodigui.BaseWindow, util.CronReceiver, CommonMixin, SpoilersMix
                 if has_cross:
                     # Cross-section hubs need library data — defer drawing until all sources complete
                     pending_libs = getattr(self, '_pendingLibrarySections', -1)
-                    pending_cross = getattr(self, '_pendingCrossSources', 0)
-                    if pending_libs == 0 and pending_cross == 0:
+                    if pending_libs == 0 and self._pendingCrossSources == 0:
                         # All sources already done, draw now
                         self.showHubs(section, update=update, reselect_pos_dict=reselect_pos_dict)
                     # else: wait for library/cross-section tasks to finish
